@@ -1,54 +1,68 @@
-from src.embeddings import cosine_similarity, generate_embeddings
+from src.database import (
+    delete_all_documents,
+    get_all_documents,
+    initialize_database,
+    insert_document,
+)
+from src.embeddings import generate_embeddings
 
 
 def main() -> None:
     documents = [
-        "PWM, motor hızını duty cycle ile kontrol eder.",
-        "SQLite hafif ve yerel bir veritabanıdır.",
-        "RAG, ilgili belgeleri bulup dil modeline bağlam olarak verir.",
-        "PID kontrolcü P, I ve D bileşenlerinden oluşur.",
+        {
+            "content": "PWM, motor hızını duty cycle ile kontrol eder.",
+            "source": "stm32_notes.txt",
+        },
+        {
+            "content": "SQLite hafif ve yerel bir veritabanıdır.",
+            "source": "database_notes.txt",
+        },
+        {
+            "content": (
+                "RAG, ilgili belgeleri bulup dil modeline "
+                "bağlam olarak verir."
+            ),
+            "source": "rag_notes.txt",
+        },
+        {
+            "content": "PID kontrolcü P, I ve D bileşenlerinden oluşur.",
+            "source": "pid_notes.txt",
+        },
     ]
-
-    query = "Motorun hızını nasıl ayarlayabilirim?"
 
     print("Local RAG AI Assistant")
     print("-" * 40)
 
-    all_texts = documents + [query]
-    embeddings = generate_embeddings(all_texts)
+    initialize_database()
+    delete_all_documents()
 
-    document_embeddings = embeddings[:-1]
-    query_embedding = embeddings[-1]
+    contents = [
+        document["content"]
+        for document in documents
+    ]
 
-    scored_documents = []
+    embeddings = generate_embeddings(contents)
 
-    for document, document_embedding in zip(
-        documents,
-        document_embeddings,
-    ):
-        score = cosine_similarity(
-            query_embedding,
-            document_embedding,
+    for document, embedding in zip(documents, embeddings):
+        document_id = insert_document(
+            content=document["content"],
+            source=document["source"],
+            embedding=embedding,
         )
 
-        scored_documents.append((document, score))
+        print(f"Belge kaydedildi. ID: {document_id}")
 
-    scored_documents.sort(
-        key=lambda item: item[1],
-        reverse=True,
-    )
+    stored_documents = get_all_documents()
 
-    print(f"\nSorgu: {query}")
-    print("\nBenzerlik sonuçları:")
+    print(f"\nToplam kayıt: {len(stored_documents)}")
 
-    for document, score in scored_documents:
-        print(f"{score:.4f} -> {document}")
-
-    best_document, best_score = scored_documents[0]
-
-    print("\nEn alakalı metin:")
-    print(best_document)
-    print(f"Benzerlik skoru: {best_score:.4f}")
+    for document in stored_documents:
+        print(
+            f"\nID: {document['id']}"
+            f"\nKaynak: {document['source']}"
+            f"\nİçerik: {document['content']}"
+            f"\nEmbedding boyutu: {len(document['embedding'])}"
+        )
 
 
 if __name__ == "__main__":
