@@ -1,34 +1,35 @@
-from src.database import initialize_database
-from src.retrieval import get_top_documents
+from src.database import get_all_documents
+from src.ingestion import ingest_text_files
 
 
 def main() -> None:
     print("Local RAG AI Assistant")
     print("-" * 40)
 
-    initialize_database()
-
-    query = "Motor hızını hangi yöntemle kontrol edebilirim?"
-
-    print(f"\nSorgu: {query}")
-
     try:
-        results = get_top_documents(
-            query=query,
-            top_k=3,
+        inserted_count = ingest_text_files(
+            reset_database=True
         )
 
-        print("\nEn alakalı belgeler:")
+        print(
+            f"\n{inserted_count} chunk "
+            "veritabanına kaydedildi."
+        )
 
-        for index, document in enumerate(
-            results,
-            start=1,
-        ):
+        stored_documents = get_all_documents()
+
+        print(
+            f"SQLite toplam kayıt: "
+            f"{len(stored_documents)}"
+        )
+
+        for document in stored_documents:
             print(
-                f"\n{index}. Sonuç"
-                f"\nBenzerlik: {document['score']:.4f}"
+                f"\nID: {document['id']}"
                 f"\nKaynak: {document['source']}"
                 f"\nİçerik: {document['content']}"
+                f"\nEmbedding boyutu: "
+                f"{len(document['embedding'])}"
             )
 
     except Exception as error:

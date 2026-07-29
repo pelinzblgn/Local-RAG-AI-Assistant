@@ -1,0 +1,7 @@
+PWM, motor hızını duty cycle ile kontrol etmek için kullanılır.
+
+Duty cycle arttıkça motora uygulanan ortalama güç artar ve motor daha hızlı döner.
+
+PID kontrolcü P, I ve D bileşenlerinden oluşur.
+
+Çizgi takip sistemlerinde hata, sensörlerden hesaplanan çizgi konumu ile hedef merkez arasındaki farktır.
