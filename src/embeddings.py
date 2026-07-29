@@ -1,5 +1,6 @@
 import math
-from foundry_local_sdk import Configuration, FoundryLocalManager
+
+from src.config import get_foundry_manager
 
 
 EMBEDDING_MODEL_ALIAS = "qwen3-embedding-0.6b"
@@ -29,9 +30,7 @@ def generate_embeddings(texts: list[str]) -> list[list[float]]:
     if not cleaned_texts:
         raise ValueError("At least one non-empty text is required.")
 
-    config = Configuration(app_name="local_rag_ai_assistant")
-    FoundryLocalManager.initialize(config)
-    manager = FoundryLocalManager.instance
+    manager = get_foundry_manager()
 
     model = manager.catalog.get_model(EMBEDDING_MODEL_ALIAS)
 

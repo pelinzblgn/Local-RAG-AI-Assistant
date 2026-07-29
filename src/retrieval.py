@@ -1,41 +1,54 @@
-from src.database import initialize_database
-from src.retrieval import get_top_documents
+from src.database import get_all_documents
+from src.embeddings import cosine_similarity, generate_embeddings
 
 
-def main() -> None:
-    print("Local RAG AI Assistant")
-    print("-" * 40)
+def get_top_documents(
+    query: str,
+    top_k: int = 3,
+) -> list[dict]:
+    """Return the most relevant stored documents for a query."""
 
-    initialize_database()
+    clean_query = query.strip()
 
-    query = (
-        "Çizgi takip aracında hata nasıl hesaplanır?"
-    )
+    if not clean_query:
+        raise ValueError("Query cannot be empty.")
 
-    print(f"\nSorgu: {query}")
+    if top_k <= 0:
+        raise ValueError("top_k must be greater than zero.")
 
-    try:
-        results = get_top_documents(
-            query=query,
-            top_k=3,
+    stored_documents = get_all_documents()
+
+    if not stored_documents:
+        raise RuntimeError(
+            "The database does not contain any documents."
         )
 
-        print("\nEn alakalı chunk'lar:")
+    print("Sorgu embedding'i oluşturuluyor...")
 
-        for index, document in enumerate(
-            results,
-            start=1,
-        ):
-            print(
-                f"\n{index}. Sonuç"
-                f"\nSkor: {document['score']:.4f}"
-                f"\nKaynak: {document['source']}"
-                f"\nİçerik: {document['content']}"
-            )
+    query_embedding = generate_embeddings(
+        [clean_query]
+    )[0]
 
-    except Exception as error:
-        print(f"\nBir hata oluştu: {error}")
+    scored_documents = []
 
+    for document in stored_documents:
+        score = cosine_similarity(
+            query_embedding,
+            document["embedding"],
+        )
 
-if __name__ == "__main__":
-    main()
+        scored_documents.append(
+            {
+                "id": document["id"],
+                "content": document["content"],
+                "source": document["source"],
+                "score": score,
+            }
+        )
+
+    scored_documents.sort(
+        key=lambda document: document["score"],
+        reverse=True,
+    )
+
+    return scored_documents[:top_k]
