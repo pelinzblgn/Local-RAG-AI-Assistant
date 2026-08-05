@@ -1,14 +1,19 @@
-from src.database import initialize_database
-from src.llm import generate_response
-from src.prompts import SYSTEM_PROMPT, build_rag_prompt
-from src.retrieval import get_top_documents
+import logging
+
+from src.assistant import RAGAssistant
+from src.logging_config import configure_logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> None:
+    """Application entry point."""
+
+    configure_logging()
+
     print("Local RAG AI Assistant")
     print("-" * 50)
-
-    initialize_database()
 
     question = (
         "Çizgi takip sisteminde hata nasıl hesaplanır?"
@@ -17,42 +22,21 @@ def main() -> None:
     print(f"\nSoru: {question}")
 
     try:
-        retrieved_documents = get_top_documents(
-            query=question,
-            top_k=3,
-        )
-
-        print("\nBulunan bağlamlar:")
-
-        for index, document in enumerate(
-            retrieved_documents,
-            start=1,
-        ):
-            print(
-                f"\n{index}. sonuç"
-                f"\nSkor: {document['score']:.4f}"
-                f"\nKaynak: {document['source']}"
-                f"\nİçerik: {document['content']}"
-            )
-
-        rag_prompt = build_rag_prompt(
-            question=question,
-            retrieved_documents=retrieved_documents,
-        )
-
-        answer = generate_response(
-            prompt=rag_prompt,
-            system_prompt=SYSTEM_PROMPT,
-        )
+        with RAGAssistant(top_k=3) as assistant:
+            response = assistant.answer(question)
 
         print("\n" + "=" * 50)
         print("RAG CEVABI")
         print("=" * 50)
-        print(answer)
+        print(response["answer"])
 
-    except Exception as error:
-        print(f"\nBir hata oluştu: {error}")
+
+    except Exception:
+        logger.exception(
+            "Uygulama çalışırken beklenmeyen bir hata oluştu."
+        )
 
 
 if __name__ == "__main__":
     main()
+    

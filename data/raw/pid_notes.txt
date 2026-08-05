@@ -1,0 +1,7 @@
+PID kontrolcü; oransal, integral ve türev bileşenlerinden oluşur.
+
+Oransal terim mevcut hataya tepki verir. Integral terim geçmiş hataları biriktirir. Türev terim hatanın değişim hızını dikkate alır.
+
+Çizgi takip sisteminde hata, sensörlerin algıladığı çizgi konumu ile hedef merkez arasındaki farktır.
+
+PID çıktısı sol ve sağ motorların hız farkını belirlemek için kullanılabilir.

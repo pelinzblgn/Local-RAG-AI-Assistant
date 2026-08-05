@@ -1,0 +1,7 @@
+Retrieval-Augmented Generation, bir dil modelinin dış belgelerden alınan bilgilerle desteklenmesini sağlayan bir yapıdır.
+
+RAG süreci retrieval, augmentation ve generation aşamalarından oluşur.
+
+Önce kullanıcı sorgusuna en yakın belge parçaları bulunur. Bu parçalar bağlam olarak dil modeline verilir.
+
+Bu yaklaşım, modelin yalnızca kendi eğitim bilgisini kullanmasına göre daha doğru ve kaynak temelli cevaplar üretmesini sağlar.

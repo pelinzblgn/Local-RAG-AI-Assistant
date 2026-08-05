@@ -1,61 +1,226 @@
+import logging
 import math
+from collections.abc import Sequence
+from typing import Any
 
-from src.config import get_foundry_manager
+logger = logging.getLogger(__name__)
 
-
-EMBEDDING_MODEL_ALIAS = "qwen3-embedding-0.6b"
-
-
-def cosine_similarity(vector_a: list[float], vector_b: list[float]) -> float:
-    """Calculate cosine similarity between two vectors."""
-
-    if len(vector_a) != len(vector_b):
-        raise ValueError("Vectors must have the same length.")
-
-    dot_product = sum(a * b for a, b in zip(vector_a, vector_b))
-    magnitude_a = math.sqrt(sum(a * a for a in vector_a))
-    magnitude_b = math.sqrt(sum(b * b for b in vector_b))
-
-    if magnitude_a == 0 or magnitude_b == 0:
-        return 0.0
-
-    return dot_product / (magnitude_a * magnitude_b)
+from src.config import (
+    EMBEDDING_MODEL_ALIAS,
+    get_foundry_manager,
+)
 
 
-def generate_embeddings(texts: list[str]) -> list[list[float]]:
-    """Generate embeddings for multiple texts using Foundry Local."""
+_embedding_model: Any | None = None
+_embedding_client: Any | None = None
 
-    cleaned_texts = [text.strip() for text in texts if text.strip()]
 
-    if not cleaned_texts:
-        raise ValueError("At least one non-empty text is required.")
+def _clean_texts(texts: Sequence[str]) -> list[str]:
+    """
+    Validate and normalize texts before embedding generation.
+
+    Args:
+        texts: Text values to normalize.
+
+    Returns:
+        Cleaned, non-empty texts.
+
+    Raises:
+        TypeError: If an item is not a string.
+        ValueError: If no usable text remains.
+    """
+
+    if len(texts) == 0:
+        raise ValueError("At least one text is required.")
+
+    cleaned_texts: list[str] = []
+
+    for index, text in enumerate(texts):
+        if not isinstance(text, str):
+            raise TypeError(
+                f"Text at index {index} must be a string."
+            )
+
+        clean_text = text.strip()
+
+        if not clean_text:
+            raise ValueError(
+                f"Text at index {index} cannot be empty."
+            )
+
+        cleaned_texts.append(clean_text)
+
+    return cleaned_texts
+
+
+def _validate_embedding(
+    embedding: Sequence[float],
+) -> list[float]:
+    """
+    Validate and normalize one embedding vector.
+
+    Args:
+        embedding: Embedding returned by the model.
+
+    Returns:
+        Embedding values converted to floats.
+
+    Raises:
+        ValueError: If the embedding is empty or invalid.
+    """
+
+    if len(embedding) == 0:
+        raise ValueError(
+            "The embedding model returned an empty vector."
+        )
+
+    normalized_embedding: list[float] = []
+
+    for value in embedding:
+        if isinstance(value, bool) or not isinstance(
+            value,
+            (int, float),
+        ):
+            raise ValueError(
+                "Embedding values must be numerical."
+            )
+
+        normalized_value = float(value)
+
+        if not math.isfinite(normalized_value):
+            raise ValueError(
+                "Embedding values must be finite."
+            )
+
+        normalized_embedding.append(normalized_value)
+
+    return normalized_embedding
+
+
+def _get_embedding_client() -> Any:
+    """
+    Load the embedding model once and return its client.
+
+    The initialized model and client are reused for later requests.
+    """
+
+    global _embedding_model
+    global _embedding_client
+
+    if _embedding_client is not None:
+        return _embedding_client
 
     manager = get_foundry_manager()
+    model = manager.catalog.get_model(
+        EMBEDDING_MODEL_ALIAS
+    )
 
-    model = manager.catalog.get_model(EMBEDDING_MODEL_ALIAS)
-
-    try:
-        print("Embedding modeli kontrol ediliyor...")
-
-        model.download(
-            lambda progress: print(
-                f"\rEmbedding modeli: %{progress:.1f}",
-                end="",
-                flush=True,
-            )
+    logger.info("Embedding modeli kontrol ediliyor.")
+    
+    model.download(
+        lambda progress: print(
+            f"\rEmbedding modeli: %{progress:.1f}",
+            end="",
+            flush=True,
         )
-        print()
+    )
 
-        print("Embedding modeli belleğe yükleniyor...")
+    print()
+    logger.info("Embedding modeli belleğe yükleniyor.")
+
+    if not model.is_loaded:
         model.load()
 
-        client = model.get_embedding_client()
+    _embedding_model = model
+    _embedding_client = model.get_embedding_client()
 
-        print("Embedding'ler üretiliyor...")
-        response = client.generate_embeddings(cleaned_texts)
+    return _embedding_client
 
-        return [item.embedding for item in response.data]
 
-    finally:
-        if model.is_loaded:
-            model.unload()
+def generate_embeddings(
+    texts: Sequence[str],
+) -> list[list[float]]:
+    """
+    Generate embeddings for one or more texts using Foundry Local.
+
+    Args:
+        texts: Texts for which embeddings will be generated.
+
+    Returns:
+        One validated embedding vector for each input text.
+
+    Raises:
+        RuntimeError: If the model returns an unexpected result count.
+        TypeError: If an input value is not a string.
+        ValueError: If an input text or returned embedding is invalid.
+    """
+
+    cleaned_texts = _clean_texts(texts)
+    client = _get_embedding_client()
+
+    logger.info(
+    "%d metin için embedding üretiliyor.",
+    len(cleaned_texts),
+)
+
+    response = client.generate_embeddings(
+        cleaned_texts
+    )
+
+    embeddings = [
+        _validate_embedding(item.embedding)
+        for item in response.data
+    ]
+
+    if len(embeddings) != len(cleaned_texts):
+        raise RuntimeError(
+            "The embedding model returned an unexpected "
+            "number of vectors."
+        )
+
+    embedding_dimensions = {
+        len(embedding)
+        for embedding in embeddings
+    }
+
+    if len(embedding_dimensions) != 1:
+        raise RuntimeError(
+            "The embedding model returned vectors with "
+            "different dimensions."
+        )
+
+    return embeddings
+
+
+def generate_embedding(text: str) -> list[float]:
+    """
+    Generate one embedding vector for a single text.
+
+    Args:
+        text: Text for which an embedding will be generated.
+
+    Returns:
+        Validated embedding vector.
+    """
+
+    return generate_embeddings([text])[0]
+
+
+def unload_embedding_model() -> None:
+    """
+    Unload the cached embedding model and clear its client.
+
+    This function may be called when the application is closing.
+    """
+
+    global _embedding_model
+    global _embedding_client
+
+    if (
+        _embedding_model is not None
+        and _embedding_model.is_loaded
+    ):
+        _embedding_model.unload()
+
+    _embedding_model = None
+    _embedding_client = None

@@ -1,0 +1,7 @@
+Microsoft Foundry Local, yapay zekâ modellerinin kullanıcının kendi cihazında çalıştırılmasını sağlar.
+
+Model inference işlemleri yerel olarak yapıldığı için uygulama internet bağlantısı olmadan çalışabilir.
+
+Foundry Local model kataloğu, model indirme, yerel çalıştırma ve Python SDK entegrasyonu sunar.
+
+Yerel çalışma gizlilik, düşük gecikme ve çevrimdışı kullanım avantajları sağlar.

@@ -1,0 +1,7 @@
+SQLite, ayrı bir sunucu gerektirmeyen hafif bir ilişkisel veritabanıdır.
+
+Veritabanının tamamı tek bir dosyada tutulabilir.
+
+Local RAG uygulamasında belge içerikleri, kaynak adları ve embedding vektörleri SQLite içinde saklanabilir.
+
+Python, sqlite3 modülü üzerinden SQLite veritabanlarına bağlanabilir.

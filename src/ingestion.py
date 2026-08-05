@@ -1,109 +1,67 @@
+import logging
 from pathlib import Path
+from typing import TypedDict
 
+from src.chunker import split_into_chunks
+from src.config import RAW_DATA_DIRECTORY
 from src.database import (
     delete_all_documents,
+    get_document_count,
     initialize_database,
     insert_document,
+)
+from src.document_loader import (
+    find_text_files,
+    read_text_file,
 )
 from src.embeddings import generate_embeddings
 
 
-RAW_DATA_DIRECTORY = Path("data") / "raw"
+logger = logging.getLogger(__name__)
 
 
-def read_text_file(file_path: Path) -> str:
-    """Read a UTF-8 text file."""
+class ChunkRecord(TypedDict):
+    """Structure of a chunk prepared for database insertion."""
 
-    if not file_path.exists():
-        raise FileNotFoundError(
-            f"File does not exist: {file_path}"
-        )
-
-    if file_path.suffix.lower() != ".txt":
-        raise ValueError(
-            f"Unsupported file type: {file_path.suffix}"
-        )
-
-    return file_path.read_text(encoding="utf-8").strip()
+    content: str
+    source: str
 
 
-def split_into_chunks(
-    text: str,
-    max_characters: int = 500,
-) -> list[str]:
-    """Split text into paragraph-based chunks."""
+def _collect_chunk_records(
+    text_files: list[Path],
+) -> list[ChunkRecord]:
+    """
+    Read text files and prepare chunk records.
 
-    clean_text = text.strip()
+    Invalid or empty TXT files are skipped with a warning.
+    """
 
-    if not clean_text:
-        return []
-
-    if max_characters <= 0:
-        raise ValueError(
-            "max_characters must be greater than zero."
-        )
-
-    paragraphs = [
-        paragraph.strip()
-        for paragraph in clean_text.split("\n\n")
-        if paragraph.strip()
-    ]
-
-    chunks: list[str] = []
-    current_chunk = ""
-
-    for paragraph in paragraphs:
-        candidate = (
-            f"{current_chunk}\n\n{paragraph}".strip()
-        )
-
-        if len(candidate) <= max_characters:
-            current_chunk = candidate
-            continue
-
-        if current_chunk:
-            chunks.append(current_chunk)
-
-        current_chunk = paragraph
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    return chunks
-
-
-def ingest_text_files(
-    reset_database: bool = False,
-) -> int:
-    """Read TXT files, create chunks and store them in SQLite."""
-
-    initialize_database()
-
-    if reset_database:
-        delete_all_documents()
-
-    if not RAW_DATA_DIRECTORY.exists():
-        raise FileNotFoundError(
-            f"Data directory does not exist: "
-            f"{RAW_DATA_DIRECTORY}"
-        )
-
-    text_files = sorted(
-        RAW_DATA_DIRECTORY.glob("*.txt")
-    )
-
-    if not text_files:
-        raise RuntimeError(
-            "No TXT files were found in data/raw."
-        )
-
-    chunk_records: list[dict[str, str]] = []
+    chunk_records: list[ChunkRecord] = []
 
     for file_path in text_files:
-        print(f"Belge okunuyor: {file_path.name}")
+        logger.info(
+            "Belge okunuyor: %s",
+            file_path.name,
+        )
 
-        text = read_text_file(file_path)
+        try:
+            text = read_text_file(
+                file_path
+            )
+        except ValueError as error:
+            logger.warning(
+                "Belge atlandı: %s",
+                error,
+            )
+            continue
+
         chunks = split_into_chunks(text)
+
+        logger.info(
+            "%s dosyasından %d chunk üretildi.",
+            file_path.name,
+            len(chunks),
+        )
 
         for chunk in chunks:
             chunk_records.append(
@@ -112,6 +70,55 @@ def ingest_text_files(
                     "source": file_path.name,
                 }
             )
+
+    return chunk_records
+
+
+def ingest_text_files(
+    reset_database: bool = False,
+    raw_data_directory: Path = RAW_DATA_DIRECTORY,
+) -> int:
+    """
+    Read TXT files, create embeddings and store chunks in SQLite.
+
+    Args:
+        reset_database: Delete current document records first.
+        raw_data_directory: Directory containing TXT documents.
+
+    Returns:
+        Number of newly stored chunks.
+
+    Raises:
+        RuntimeError: If the directory contains no TXT files
+            or no valid chunks can be generated.
+    """
+
+    initialize_database()
+
+    if reset_database:
+        logger.warning(
+            "Mevcut belge kayıtları siliniyor."
+        )
+        delete_all_documents()
+
+    text_files = find_text_files(
+        raw_data_directory
+    )
+
+    if not text_files:
+        raise RuntimeError(
+            f"No TXT files were found in "
+            f"{raw_data_directory}."
+        )
+
+    logger.info(
+        "%d TXT dosyası bulundu.",
+        len(text_files),
+    )
+
+    chunk_records = _collect_chunk_records(
+        text_files
+    )
 
     if not chunk_records:
         raise RuntimeError(
@@ -123,16 +130,26 @@ def ingest_text_files(
         for record in chunk_records
     ]
 
-    print(
-        f"Toplam {len(contents)} chunk için "
-        "embedding oluşturuluyor..."
+    logger.info(
+        "Toplam %d chunk için embedding oluşturuluyor.",
+        len(contents),
     )
 
-    embeddings = generate_embeddings(contents)
+    embeddings = generate_embeddings(
+        contents
+    )
+
+    if len(embeddings) != len(chunk_records):
+        raise RuntimeError(
+            "Chunk and embedding counts do not match."
+        )
+
+    count_before = get_document_count()
 
     for record, embedding in zip(
         chunk_records,
         embeddings,
+        strict=True,
     ):
         insert_document(
             content=record["content"],
@@ -140,4 +157,13 @@ def ingest_text_files(
             embedding=embedding,
         )
 
-    return len(chunk_records)
+    count_after = get_document_count()
+    inserted_count = count_after - count_before
+
+    logger.info(
+        "Ingestion tamamlandı. İşlenen: %d, yeni kayıt: %d",
+        len(chunk_records),
+        inserted_count,
+    )
+
+    return inserted_count

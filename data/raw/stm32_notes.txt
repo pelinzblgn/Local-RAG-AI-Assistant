@@ -1,7 +1,7 @@
-PWM, motor hızını duty cycle ile kontrol etmek için kullanılır.
+STM32, STMicroelectronics tarafından geliştirilen ARM tabanlı mikrodenetleyici ailesidir.
 
-Duty cycle arttıkça motora uygulanan ortalama güç artar ve motor daha hızlı döner.
+STM32 mikrodenetleyiciler GPIO, timer, PWM, ADC, UART, SPI ve I2C gibi çevre birimlerine sahiptir.
 
-PID kontrolcü P, I ve D bileşenlerinden oluşur.
+PWM sinyali, duty cycle değiştirilerek DC motor hızının kontrol edilmesini sağlar.
 
-Çizgi takip sistemlerinde hata, sensörlerden hesaplanan çizgi konumu ile hedef merkez arasındaki farktır.
+Çizgi takip aracında sensörlerden alınan konum bilgisi motor hızlarını ayarlamak için kullanılır.
