@@ -1,8 +1,10 @@
 import math
+from unittest.mock import patch
 
 from src.embeddings import (
     _clean_texts,
     _validate_embedding,
+    warm_up_embedding_model,
 )
 
 
@@ -194,6 +196,12 @@ def run_tests() -> None:
     print("-" * 50)
     print(f"Sonuç: {passed}/{len(tests)} test başarılı.")
 
+def test_warm_up_embedding_model_initializes_client() -> None:
+    with patch(
+        "src.embeddings._get_embedding_client"
+    ) as mocked_get_client:
+        warm_up_embedding_model()
 
+    mocked_get_client.assert_called_once()
 if __name__ == "__main__":
     run_tests()

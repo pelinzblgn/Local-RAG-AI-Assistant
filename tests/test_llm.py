@@ -214,6 +214,15 @@ def run_tests() -> None:
         "test başarılı."
     )
 
+    def test_warm_up_initializes_client() -> None:
+        llm = LocalLLM()
 
+        with patch.object(
+            llm,
+            "_ensure_client",
+        ) as mocked_ensure_client:
+            llm.warm_up()
+
+        mocked_ensure_client.assert_called_once()
 if __name__ == "__main__":
     run_tests()

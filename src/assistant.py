@@ -6,6 +6,7 @@ from src.config import (
     TOP_K,
 )
 from src.llm import LocalLLM
+from src.memory import ConversationMemory
 from src.prompts import (
     DEFAULT_FALLBACK_MESSAGE,
     PromptBuilder,
@@ -29,13 +30,15 @@ class AssistantResponse(TypedDict):
 
 class RAGAssistant:
     """
-    Orchestrate retrieval, prompt construction, and local generation.
+    Orchestrate retrieval, prompt construction, local generation,
+    and session-level conversation memory.
     """
 
     def __init__(
         self,
         local_llm: LocalLLM | None = None,
         prompt_builder: PromptBuilder | None = None,
+        memory: ConversationMemory | None = None,
         top_k: int = TOP_K,
         minimum_score: float = MIN_SIMILARITY_SCORE,
     ) -> None:
@@ -45,8 +48,12 @@ class RAGAssistant:
         Args:
             local_llm: Optional local LLM instance.
             prompt_builder: Optional prompt builder instance.
+            memory: Optional conversation memory instance.
             top_k: Maximum number of retrieved documents.
             minimum_score: Minimum accepted similarity score.
+
+        Raises:
+            ValueError: If retrieval settings are invalid.
         """
 
         if top_k <= 0:
@@ -59,16 +66,45 @@ class RAGAssistant:
                 "minimum_score must be between -1.0 and 1.0."
             )
 
-        self._local_llm = local_llm or LocalLLM()
-        self._prompt_builder = (
-            prompt_builder or PromptBuilder()
+        self._local_llm = (
+            local_llm
+            if local_llm is not None
+            else LocalLLM()
         )
+
+        self._prompt_builder = (
+            prompt_builder
+            if prompt_builder is not None
+            else PromptBuilder()
+        )
+
+        self._memory = (
+            memory
+            if memory is not None
+            else ConversationMemory()
+        )
+
         self._top_k = top_k
         self._minimum_score = minimum_score
 
-    def answer(self, question: str) -> AssistantResponse:
+    @property
+    def memory_size(self) -> int:
+        """Return the number of stored conversation turns."""
+
+        return self._memory.size
+    def warm_up(self) -> None:
+        """Prepare the local chat model before user interaction."""
+
+        self._local_llm.warm_up()
+    def answer(
+        self,
+        question: str,
+    ) -> AssistantResponse:
         """
         Answer a question using the local RAG pipeline.
+
+        Recent conversation history is used to enrich the retrieval
+        query. A successful answer is stored in session memory.
 
         Args:
             question: User question.
@@ -93,8 +129,19 @@ class RAGAssistant:
                 "Question cannot be empty."
             )
 
+        retrieval_query = (
+            self._memory.build_retrieval_query(
+                clean_question
+            )
+        )
+
+        logger.debug(
+            "Retrieval sorgusu oluşturuldu: %s",
+            retrieval_query,
+        )
+
         retrieved_documents = get_top_documents(
-            query=clean_question,
+            query=retrieval_query,
             top_k=self._top_k,
             minimum_score=self._minimum_score,
         )
@@ -115,16 +162,26 @@ class RAGAssistant:
             len(retrieved_documents),
         )
 
+        conversation_history = (
+            self._memory.build_history_text()
+        )
+
         system_prompt, user_prompt = (
             self._prompt_builder.build(
                 question=clean_question,
                 retrieved_documents=retrieved_documents,
+                conversation_history=conversation_history,
             )
         )
 
-        answer = self._local_llm.generate(
+        generated_answer = self._local_llm.generate(
             prompt=user_prompt,
             system_prompt=system_prompt,
+        )
+
+        self._memory.add_turn(
+            question=clean_question,
+            answer=generated_answer,
         )
 
         sources = list(
@@ -135,10 +192,24 @@ class RAGAssistant:
         )
 
         return {
-            "answer": answer,
+            "answer": generated_answer,
             "sources": sources,
             "retrieved_documents": retrieved_documents,
         }
+
+    def clear_memory(self) -> None:
+        """Clear the current conversation history."""
+
+        self._memory.clear()
+
+        logger.info(
+            "Konuşma hafızası temizlendi."
+        )
+
+    def get_conversation_history(self) -> str:
+        """Return formatted conversation history."""
+
+        return self._memory.build_history_text()
 
     def close(self) -> None:
         """Release the local chat model."""

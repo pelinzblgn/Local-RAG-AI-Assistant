@@ -5,6 +5,12 @@ from foundry_local_sdk import (
     FoundryLocalManager,
 )
 
+# ==========================================================
+# Conversation Memory
+# ==========================================================
+
+MEMORY_MAX_TURNS = 6
+RETRIEVAL_MEMORY_TURNS = 2
 
 # ==========================================================
 # Project Paths

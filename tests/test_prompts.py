@@ -203,3 +203,53 @@ def run_tests() -> None:
 
 if __name__ == "__main__":
     run_tests()
+    
+    
+def test_user_prompt_contains_conversation_history() -> None:
+    builder = PromptBuilder()
+
+    history = (
+        "[Konuşma 1]\n"
+        "Kullanıcı: STM32 nedir?\n"
+        "Asistan: STM32 bir mikrodenetleyici ailesidir."
+    )
+
+    prompt = builder.build_user_prompt(
+        question="Peki PWM ne işe yarar?",
+        retrieved_documents=SAMPLE_DOCUMENTS,
+        conversation_history=history,
+    )
+
+    assert "KONUŞMA GEÇMİŞİ" in prompt
+    assert "STM32 nedir?" in prompt
+    assert "Peki PWM ne işe yarar?" in prompt
+
+
+def test_empty_conversation_history_is_not_rendered() -> None:
+    builder = PromptBuilder()
+
+    prompt = builder.build_user_prompt(
+        question="PID nedir?",
+        retrieved_documents=SAMPLE_DOCUMENTS,
+        conversation_history="   ",
+    )
+
+    assert "KONUŞMA GEÇMİŞİ" not in prompt
+
+
+def test_non_string_conversation_history_raises_error() -> None:
+    builder = PromptBuilder()
+
+    try:
+        builder.build_user_prompt(
+            question="PID nedir?",
+            retrieved_documents=SAMPLE_DOCUMENTS,
+            conversation_history=123,  # type: ignore[arg-type]
+        )
+    except TypeError as error:
+        assert "Conversation history" in str(error)
+        return
+
+    raise AssertionError(
+        "Expected TypeError for invalid conversation history."
+    )

@@ -205,6 +205,16 @@ def generate_embedding(text: str) -> list[float]:
 
     return generate_embeddings([text])[0]
 
+def warm_up_embedding_model() -> None:
+    """
+    Load and prepare the embedding model before the first query.
+    """
+
+    _get_embedding_client()
+
+    logger.info(
+        "Embedding modeli warm-up tamamlandı."
+    )
 
 def unload_embedding_model() -> None:
     """

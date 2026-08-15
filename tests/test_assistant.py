@@ -19,6 +19,16 @@ SAMPLE_DOCUMENTS = [
     },
 ]
 
+def test_warm_up_delegates_to_local_llm() -> None:
+    mock_llm = MagicMock()
+
+    assistant = RAGAssistant(
+        local_llm=mock_llm,
+    )
+
+    assistant.warm_up()
+
+    mock_llm.warm_up.assert_called_once()
 
 def test_answer_returns_generated_response_and_sources() -> None:
     mock_llm = MagicMock()
@@ -165,7 +175,111 @@ def test_close_unloads_llm() -> None:
 
     mock_llm.unload.assert_called_once()
 
+def test_successful_answer_is_saved_to_memory() -> None:
+    mock_llm = MagicMock()
+    mock_llm.generate.return_value = (
+        "STM32 bir mikrodenetleyici ailesidir."
+    )
 
+    assistant = RAGAssistant(
+        local_llm=mock_llm,
+    )
+
+    with patch(
+        "src.assistant.get_top_documents",
+        return_value=SAMPLE_DOCUMENTS,
+    ):
+        assistant.answer(
+            "STM32 nedir?"
+        )
+
+    assert assistant.memory_size == 1
+
+    history = assistant.get_conversation_history()
+
+    assert "STM32 nedir?" in history
+    assert (
+        "STM32 bir mikrodenetleyici ailesidir."
+        in history
+    )
+
+
+def test_previous_question_is_used_for_followup_retrieval() -> None:
+    mock_llm = MagicMock()
+
+    mock_llm.generate.side_effect = [
+        "STM32 bir mikrodenetleyicidir.",
+        "PWM motor kontrolünde kullanılabilir.",
+    ]
+
+    assistant = RAGAssistant(
+        local_llm=mock_llm,
+    )
+
+    with patch(
+        "src.assistant.get_top_documents",
+        return_value=SAMPLE_DOCUMENTS,
+    ) as mocked_retrieval:
+        assistant.answer(
+            "STM32 nedir?"
+        )
+
+        assistant.answer(
+            "Peki PWM ne işe yarar?"
+        )
+
+    second_query = (
+        mocked_retrieval.call_args_list[1]
+        .kwargs["query"]
+    )
+
+    assert "STM32 nedir?" in second_query
+    assert "Peki PWM ne işe yarar?" in second_query
+
+
+def test_clear_memory_removes_conversation_history() -> None:
+    mock_llm = MagicMock()
+    mock_llm.generate.return_value = "Cevap"
+
+    assistant = RAGAssistant(
+        local_llm=mock_llm,
+    )
+
+    with patch(
+        "src.assistant.get_top_documents",
+        return_value=SAMPLE_DOCUMENTS,
+    ):
+        assistant.answer(
+            "PID nedir?"
+        )
+
+    assert assistant.memory_size == 1
+
+    assistant.clear_memory()
+
+    assert assistant.memory_size == 0
+    assert assistant.get_conversation_history() == ""
+
+
+def test_fallback_response_is_not_saved_to_memory() -> None:
+    mock_llm = MagicMock()
+
+    assistant = RAGAssistant(
+        local_llm=mock_llm,
+    )
+
+    with patch(
+        "src.assistant.get_top_documents",
+        return_value=[],
+    ):
+        response = assistant.answer(
+            "Belgelerde olmayan bilgi"
+        )
+
+    assert response["answer"] == DEFAULT_FALLBACK_MESSAGE
+    assert assistant.memory_size == 0
+
+    mock_llm.generate.assert_not_called()
 def run_tests() -> None:
     tests = [
         test_answer_returns_generated_response_and_sources,

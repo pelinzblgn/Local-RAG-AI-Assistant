@@ -121,6 +121,83 @@ def run_tests() -> None:
         f"Sonuç: {passed}/{len(tests)} "
         "test başarılı."
     )
+def test_paragraph_boundaries_are_preserved() -> None:
+    text = (
+        "Birinci paragraf STM32 hakkındadır.\n\n"
+        "İkinci paragraf PWM hakkındadır.\n\n"
+        "Üçüncü paragraf PID hakkındadır."
+    )
+
+    chunks = split_into_chunks(
+        text=text,
+        max_characters=80,
+        overlap_characters=10,
+    )
+
+    assert len(chunks) >= 2
+
+    combined = "\n\n".join(
+        chunks
+    )
+
+    assert "Birinci paragraf STM32 hakkındadır." in combined
+    assert "İkinci paragraf PWM hakkındadır." in combined
+    assert "Üçüncü paragraf PID hakkındadır." in combined
+
+
+def test_short_paragraphs_can_share_one_chunk() -> None:
+    text = (
+        "STM32 bir mikrodenetleyicidir.\n\n"
+        "PWM motor hızını kontrol eder."
+    )
+
+    chunks = split_into_chunks(
+        text=text,
+        max_characters=100,
+        overlap_characters=10,
+    )
+
+    assert len(chunks) == 1
+
+    assert "STM32" in chunks[0]
+    assert "PWM" in chunks[0]
+
+
+def test_long_paragraph_uses_fallback_chunking() -> None:
+    text = " ".join(
+        f"kelime{i}"
+        for i in range(120)
+    )
+
+    chunks = split_into_chunks(
+        text=text,
+        max_characters=100,
+        overlap_characters=20,
+    )
+
+    assert len(chunks) > 1
+
+    for chunk in chunks:
+        assert len(chunk) <= 100
+
+
+def test_multiple_blank_lines_are_supported() -> None:
+    text = (
+        "Birinci paragraf."
+        "\n\n\n\n"
+        "İkinci paragraf."
+    )
+
+    chunks = split_into_chunks(
+        text=text,
+        max_characters=100,
+        overlap_characters=10,
+    )
+
+    assert len(chunks) == 1
+    assert "Birinci paragraf." in chunks[0]
+    assert "İkinci paragraf." in chunks[0]
+
 
 
 if __name__ == "__main__":

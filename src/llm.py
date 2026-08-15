@@ -203,7 +203,17 @@ class LocalLLM:
         """Return the LLM instance."""
 
         return self
+    def warm_up(self) -> None:
+        """
+        Load and prepare the local chat model before the first request.
+        """
 
+        self._ensure_client()
+
+        logger.info(
+            "Chat modeli warm-up tamamlandı."
+        )
+    
     def __exit__(
         self,
         exception_type: object,
