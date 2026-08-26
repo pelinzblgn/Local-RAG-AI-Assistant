@@ -3,7 +3,10 @@ import logging
 from collections.abc import Sequence
 
 from src.assistant import RAGAssistant
-from src.cli import run_chat_session
+from src.cli import (
+    format_sync_result,
+    run_chat_session,
+)
 from src.config import (
     DATABASE_PATH,
     RAW_DATA_DIRECTORY,
@@ -16,6 +19,9 @@ from src.document_loader import find_text_files
 from src.embeddings import (
     unload_embedding_model,
     warm_up_embedding_model,
+)
+from src.file_sync import (
+    synchronize_knowledge_base,
 )
 from src.ingestion import ingest_text_files
 from src.logging_config import configure_logging
@@ -30,11 +36,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="Local RAG AI Assistant",
         description=(
-            "Run and manage the local Foundry Local RAG assistant."
+            "Run and manage the local Foundry Local "
+            "RAG assistant."
         ),
     )
 
-    actions = parser.add_mutually_exclusive_group()
+    actions = (
+        parser.add_mutually_exclusive_group()
+    )
 
     actions.add_argument(
         "--chat",
@@ -46,8 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--ingest",
         action="store_true",
         help=(
-            "Process documents in data/raw and add new "
-            "chunks to the knowledge base."
+            "Process documents in data/raw and add "
+            "new chunks to the knowledge base."
         ),
     )
 
@@ -55,15 +64,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--reset",
         action="store_true",
         help=(
-            "Clear the current knowledge base and rebuild it "
-            "from documents in data/raw."
+            "Clear and rebuild the entire "
+            "knowledge base."
+        ),
+    )
+
+    actions.add_argument(
+        "--sync",
+        action="store_true",
+        help=(
+            "Incrementally synchronize changed "
+            "documents with the knowledge base."
         ),
     )
 
     actions.add_argument(
         "--stats",
         action="store_true",
-        help="Display local knowledge-base statistics.",
+        help=(
+            "Display local knowledge-base statistics."
+        ),
     )
 
     return parser
@@ -75,7 +95,7 @@ def run_chat() -> None:
     initialize_database()
 
     print(
-        "Yerel modeller hazırlanıyor..."
+        "\nYerel modeller hazırlanıyor..."
     )
 
     warm_up_embedding_model()
@@ -103,7 +123,9 @@ def run_ingestion(
         else "Yeni belgeler işleniyor."
     )
 
-    print(action_name)
+    print(
+        action_name
+    )
 
     inserted_count = ingest_text_files(
         reset_database=reset_database,
@@ -111,7 +133,9 @@ def run_ingestion(
 
     total_count = get_document_count()
 
-    print("\nIngestion tamamlandı.")
+    print(
+        "\nIngestion tamamlandı."
+    )
     print(
         f"Yeni eklenen chunk: {inserted_count}"
     )
@@ -120,20 +144,48 @@ def run_ingestion(
     )
 
 
+def run_sync() -> None:
+    """
+    Incrementally synchronize source documents
+    with the local knowledge base.
+    """
+
+    print(
+        "Knowledge base senkronize ediliyor..."
+    )
+
+    result = synchronize_knowledge_base()
+
+    for line in format_sync_result(
+        result
+    ):
+        print(
+            line
+        )
+
+
 def show_stats() -> None:
     """Display local knowledge-base statistics."""
 
     initialize_database()
 
-    document_count = get_document_count()
+    document_count = (
+        get_document_count()
+    )
 
     try:
         source_files = find_text_files(
             RAW_DATA_DIRECTORY
         )
-        source_count = len(source_files)
 
-    except (FileNotFoundError, ValueError):
+        source_count = len(
+            source_files
+        )
+
+    except (
+        FileNotFoundError,
+        ValueError,
+    ):
         source_count = 0
 
     if DATABASE_PATH.exists():
@@ -147,8 +199,12 @@ def show_stats() -> None:
         database_size_bytes / 1024
     )
 
-    print("Local RAG Knowledge Base")
-    print("=" * 50)
+    print(
+        "Local RAG Knowledge Base"
+    )
+    print(
+        "=" * 50
+    )
     print(
         f"Kaynak TXT dosyası : {source_count}"
     )
@@ -156,7 +212,8 @@ def show_stats() -> None:
         f"Kayıtlı chunk      : {document_count}"
     )
     print(
-        f"Veritabanı boyutu  : {database_size_kb:.2f} KB"
+        f"Veritabanı boyutu  : "
+        f"{database_size_kb:.2f} KB"
     )
     print(
         f"Veritabanı yolu    : {DATABASE_PATH}"
@@ -171,7 +228,10 @@ def main(
     configure_logging()
 
     parser = build_parser()
-    args = parser.parse_args(argv)
+
+    args = parser.parse_args(
+        argv
+    )
 
     try:
         if args.ingest:
@@ -184,16 +244,21 @@ def main(
                 reset_database=True
             )
 
+        elif args.sync:
+            run_sync()
+
         elif args.stats:
             show_stats()
 
         else:
-            # Default behavior and --chat both start chat mode.
             run_chat()
 
     except Exception:
         logger.exception(
-            "Uygulama çalışırken beklenmeyen bir hata oluştu."
+            (
+                "Uygulama çalışırken "
+                "beklenmeyen bir hata oluştu."
+            )
         )
 
     finally:

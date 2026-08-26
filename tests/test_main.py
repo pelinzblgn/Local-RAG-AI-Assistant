@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import main as app_main
 
@@ -122,3 +122,64 @@ def test_stats_flag_displays_statistics() -> None:
         )
 
     mocked_stats.assert_called_once()
+    
+    
+def test_sync_flag_runs_incremental_sync() -> None:
+    with (
+        patch.object(
+            app_main,
+            "run_sync",
+        ) as mocked_sync,
+        patch.object(
+            app_main,
+            "unload_embedding_model",
+        ),
+    ):
+        app_main.main(
+            ["--sync"]
+        )
+
+    mocked_sync.assert_called_once()
+
+
+def test_run_sync_displays_sync_result() -> None:
+    mock_result = MagicMock()
+
+    mock_result.new_files = (
+        "new.txt",
+    )
+    mock_result.modified_files = ()
+    mock_result.deleted_files = ()
+    mock_result.unchanged_files = ()
+    mock_result.inserted_chunks = 1
+    mock_result.deleted_chunks = 0
+    mock_result.has_changes = True
+
+    with (
+        patch.object(
+            app_main,
+            "synchronize_knowledge_base",
+            return_value=mock_result,
+        ) as mocked_sync,
+        patch.object(
+            app_main,
+            "format_sync_result",
+            return_value=[
+                "SYNC RESULT",
+            ],
+        ),
+        patch(
+            "builtins.print",
+        ) as mocked_print,
+    ):
+        app_main.run_sync()
+
+    mocked_sync.assert_called_once()
+
+    assert any(
+        call.args
+        and "SYNC RESULT" in str(
+            call.args[0]
+        )
+        for call in mocked_print.call_args_list
+    )

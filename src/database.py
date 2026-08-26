@@ -18,6 +18,13 @@ class DocumentRecord(TypedDict):
     embedding: list[float]
     created_at: str
 
+class SourceFileRecord(TypedDict):
+    """Metadata for an indexed source file."""
+
+    source: str
+    file_hash: str
+    modified_at: float
+    indexed_at: str
 
 def create_connection(
     database_path: Path = DATABASE_PATH,
@@ -75,10 +82,15 @@ def initialize_database(
     database_path: Path = DATABASE_PATH,
 ) -> None:
     """
-    Create the documents table when it does not exist.
+    Initialize the local RAG database.
 
-    Duplicate content from the same source is prevented by a
-    database-level unique constraint.
+    Creates:
+        documents:
+            Stores document chunks and embeddings.
+
+        source_files:
+            Tracks indexed source files and their fingerprints
+            for incremental synchronization.
     """
 
     with database_connection(database_path) as connection:
@@ -95,6 +107,16 @@ def initialize_database(
             """
         )
 
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS source_files (
+                source TEXT PRIMARY KEY,
+                file_hash TEXT NOT NULL,
+                modified_at REAL NOT NULL,
+                indexed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
 
 def _validate_embedding(
     embedding: Sequence[float],
@@ -330,7 +352,11 @@ def get_document_count(
 def delete_all_documents(
     database_path: Path = DATABASE_PATH,
 ) -> None:
-    """Delete all document chunks and reset the ID sequence."""
+    """
+    Delete all document chunks and indexed source metadata.
+
+    Also resets the document ID sequence.
+    """
 
     initialize_database(
         database_path
@@ -342,8 +368,248 @@ def delete_all_documents(
         )
 
         connection.execute(
+            "DELETE FROM source_files"
+        )
+
+        connection.execute(
             """
             DELETE FROM sqlite_sequence
             WHERE name = 'documents'
             """
         )
+        
+def get_source_file(
+    source: str,
+    database_path: Path = DATABASE_PATH,
+) -> SourceFileRecord | None:
+    """
+    Return metadata for one indexed source file.
+
+    Returns None when the source has never been indexed.
+    """
+
+    clean_source = source.strip()
+
+    if not clean_source:
+        raise ValueError(
+            "Source cannot be empty."
+        )
+
+    initialize_database(
+        database_path
+    )
+
+    with database_connection(database_path) as connection:
+        row = connection.execute(
+            """
+            SELECT
+                source,
+                file_hash,
+                modified_at,
+                indexed_at
+            FROM source_files
+            WHERE source = ?
+            """,
+            (
+                clean_source,
+            ),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return {
+        "source": str(row["source"]),
+        "file_hash": str(row["file_hash"]),
+        "modified_at": float(
+            row["modified_at"]
+        ),
+        "indexed_at": str(
+            row["indexed_at"]
+        ),
+    }
+
+
+def get_all_source_files(
+    database_path: Path = DATABASE_PATH,
+) -> list[SourceFileRecord]:
+    """
+    Return metadata for every indexed source file.
+    """
+
+    initialize_database(
+        database_path
+    )
+
+    with database_connection(database_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                source,
+                file_hash,
+                modified_at,
+                indexed_at
+            FROM source_files
+            ORDER BY source
+            """
+        ).fetchall()
+
+    return [
+        {
+            "source": str(row["source"]),
+            "file_hash": str(
+                row["file_hash"]
+            ),
+            "modified_at": float(
+                row["modified_at"]
+            ),
+            "indexed_at": str(
+                row["indexed_at"]
+            ),
+        }
+        for row in rows
+    ]
+
+
+def upsert_source_file(
+    source: str,
+    file_hash: str,
+    modified_at: float,
+    database_path: Path = DATABASE_PATH,
+) -> None:
+    """
+    Insert or update metadata for an indexed source file.
+    """
+
+    clean_source = source.strip()
+    clean_hash = file_hash.strip()
+
+    if not clean_source:
+        raise ValueError(
+            "Source cannot be empty."
+        )
+
+    if not clean_hash:
+        raise ValueError(
+            "File hash cannot be empty."
+        )
+
+    if isinstance(modified_at, bool) or not isinstance(
+        modified_at,
+        (int, float),
+    ):
+        raise TypeError(
+            "modified_at must be numerical."
+        )
+
+    normalized_modified_at = float(
+        modified_at
+    )
+
+    if not math.isfinite(
+        normalized_modified_at
+    ):
+        raise ValueError(
+            "modified_at must be finite."
+        )
+
+    initialize_database(
+        database_path
+    )
+
+    with database_connection(database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO source_files (
+                source,
+                file_hash,
+                modified_at
+            )
+            VALUES (?, ?, ?)
+
+            ON CONFLICT(source)
+            DO UPDATE SET
+                file_hash = excluded.file_hash,
+                modified_at = excluded.modified_at,
+                indexed_at = CURRENT_TIMESTAMP
+            """,
+            (
+                clean_source,
+                clean_hash,
+                normalized_modified_at,
+            ),
+        )
+
+
+def delete_documents_by_source(
+    source: str,
+    database_path: Path = DATABASE_PATH,
+) -> int:
+    """
+    Delete all document chunks belonging to one source.
+
+    Returns:
+        Number of deleted chunks.
+    """
+
+    clean_source = source.strip()
+
+    if not clean_source:
+        raise ValueError(
+            "Source cannot be empty."
+        )
+
+    initialize_database(
+        database_path
+    )
+
+    with database_connection(database_path) as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM documents
+            WHERE source = ?
+            """,
+            (
+                clean_source,
+            ),
+        )
+
+        return int(
+            cursor.rowcount
+        )
+
+
+def delete_source_file(
+    source: str,
+    database_path: Path = DATABASE_PATH,
+) -> bool:
+    """
+    Delete indexed-file metadata.
+
+    Returns:
+        True when a metadata row was deleted.
+    """
+
+    clean_source = source.strip()
+
+    if not clean_source:
+        raise ValueError(
+            "Source cannot be empty."
+        )
+
+    initialize_database(
+        database_path
+    )
+
+    with database_connection(database_path) as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM source_files
+            WHERE source = ?
+            """,
+            (
+                clean_source,
+            ),
+        )
+
+        return cursor.rowcount > 0

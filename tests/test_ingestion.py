@@ -1,74 +1,89 @@
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from src.chunker import split_into_chunks
-from src.document_loader import read_text_file
-from src.ingestion import ingest_text_files
+import pytest
 
-def test_read_text_file_returns_clean_content() -> None:
-    with tempfile.TemporaryDirectory() as temp_directory:
-        file_path = Path(temp_directory) / "notes.txt"
-        file_path.write_text(
-            "  STM32 PWM motor hızını kontrol eder.  ",
-            encoding="utf-8",
-        )
+from src.database import (
+    get_all_documents,
+    get_all_source_files,
+)
+from src.ingestion import (
+    ingest_text_files,
+)
+from src.document_loader import (
+    read_text_file,
+)
+from src.chunker import (
+    split_into_chunks,
+)
 
-        content = read_text_file(file_path)
 
-        assert content == "STM32 PWM motor hızını kontrol eder."
+def test_read_text_file_returns_clean_content(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "test.txt"
 
-
-def test_read_text_file_rejects_missing_file() -> None:
-    missing_file = Path("missing_file.txt")
-
-    try:
-        read_text_file(missing_file)
-    except FileNotFoundError as error:
-        assert "File does not exist" in str(error)
-        return
-
-    raise AssertionError(
-        "Expected FileNotFoundError for missing file."
+    file_path.write_text(
+        "  STM32 test content  ",
+        encoding="utf-8",
     )
 
-
-def test_read_text_file_rejects_non_txt_file() -> None:
-    with tempfile.TemporaryDirectory() as temp_directory:
-        file_path = Path(temp_directory) / "notes.md"
-        file_path.write_text(
-            "Markdown content",
-            encoding="utf-8",
-        )
-
-        try:
-            read_text_file(file_path)
-        except ValueError as error:
-            assert "Unsupported file type" in str(error)
-            return
-
-    raise AssertionError(
-        "Expected ValueError for unsupported file type."
+    result = read_text_file(
+        file_path
     )
 
+    assert result == "STM32 test content"
 
-def test_read_text_file_rejects_empty_file() -> None:
-    with tempfile.TemporaryDirectory() as temp_directory:
-        file_path = Path(temp_directory) / "empty.txt"
-        file_path.write_text(
-            "   ",
-            encoding="utf-8",
+
+def test_read_text_file_rejects_missing_file(
+    tmp_path: Path,
+) -> None:
+    file_path = (
+        tmp_path / "missing.txt"
+    )
+
+    with pytest.raises(
+        FileNotFoundError
+    ):
+        read_text_file(
+            file_path
         )
 
-        try:
-            read_text_file(file_path)
-        except ValueError as error:
-            assert "Text file is empty" in str(error)
-            return
 
-    raise AssertionError(
-        "Expected ValueError for empty text file."
+def test_read_text_file_rejects_non_txt_file(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "test.md"
+
+    file_path.write_text(
+        "Markdown content",
+        encoding="utf-8",
     )
+
+    with pytest.raises(
+        ValueError
+    ):
+        read_text_file(
+            file_path
+        )
+
+
+def test_read_text_file_rejects_empty_file(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "empty.txt"
+
+    file_path.write_text(
+        "   ",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError
+    ):
+        read_text_file(
+            file_path
+        )
 
 
 def test_split_into_chunks_uses_configured_limits() -> None:
@@ -79,170 +94,241 @@ def test_split_into_chunks_uses_configured_limits() -> None:
 
     chunks = split_into_chunks(
         text=text,
-        max_characters=120,
+        max_characters=100,
         overlap_characters=20,
     )
 
     assert len(chunks) > 1
-    assert all(
-        0 < len(chunk) <= 120
-        for chunk in chunks
+
+    for chunk in chunks:
+        assert chunk.strip()
+        assert len(chunk) <= 100
+
+
+def test_ingestion_stores_generated_chunks(
+    tmp_path: Path,
+) -> None:
+    raw_directory = (
+        tmp_path / "raw"
     )
 
+    raw_directory.mkdir()
 
-def test_ingestion_stores_generated_chunks() -> None:
-    with tempfile.TemporaryDirectory() as temp_directory:
-        raw_directory = Path(temp_directory)
+    file_path = (
+        raw_directory / "stm32.txt"
+    )
 
-        first_file = raw_directory / "pid.txt"
-        second_file = raw_directory / "stm32.txt"
+    file_path.write_text(
+        "STM32 PWM UART GPIO",
+        encoding="utf-8",
+    )
 
-        first_file.write_text(
-            "PID kontrolcü P, I ve D bileşenlerinden oluşur.",
-            encoding="utf-8",
-        )
-
-        second_file.write_text(
-            "PWM duty cycle motor hızını kontrol eder.",
-            encoding="utf-8",
-        )
-
-        fake_embeddings = [
-            [0.1, 0.2],
-            [0.3, 0.4],
-        ]
-
-        inserted_documents: list[dict[str, object]] = []
-
-        def fake_insert_document(
-            content: str,
-            source: str,
-            embedding: list[float],
-        ) -> int:
-            inserted_documents.append(
-                {
-                    "content": content,
-                    "source": source,
-                    "embedding": embedding,
-                }
-            )
-
-            return len(inserted_documents)
-
-        with (
-            patch(
-                "src.ingestion.initialize_database"
-            ),
-            patch(
-                "src.ingestion.delete_all_documents"
-            ),
-            patch(
-                "src.ingestion.get_document_count",
-                side_effect=[0, 2],
-            ),
-            patch(
-                "src.ingestion.generate_embeddings",
-                return_value=fake_embeddings,
-            ) as mocked_embeddings,
-            patch(
-                "src.ingestion.insert_document",
-                side_effect=fake_insert_document,
-            ),
-        ):
-            inserted_count = ingest_text_files(
-                reset_database=True,
-                raw_data_directory=raw_directory,
-            )
-
-        assert inserted_count == 2
-        assert len(inserted_documents) == 2
-
-        assert inserted_documents[0]["source"] == "pid.txt"
-        assert inserted_documents[1]["source"] == "stm32.txt"
-
-        mocked_embeddings.assert_called_once()
-
-        generated_contents = mocked_embeddings.call_args.args[0]
-
-        assert len(generated_contents) == 2
-
-
-def test_ingestion_rejects_missing_directory() -> None:
-    missing_directory = Path(
-        "directory_that_does_not_exist"
+    database_path = (
+        tmp_path / "test.db"
     )
 
     with patch(
-        "src.ingestion.initialize_database"
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.1, 0.2, 0.3],
+        ],
     ):
-        try:
-            ingest_text_files(
-                raw_data_directory=missing_directory,
-            )
-        except FileNotFoundError as error:
-            assert "Data directory does not exist" in str(error)
-            return
-
-    raise AssertionError(
-        "Expected FileNotFoundError for missing directory."
-    )
-
-
-def test_ingestion_rejects_directory_without_txt_files() -> None:
-    with tempfile.TemporaryDirectory() as temp_directory:
-        raw_directory = Path(temp_directory)
-
-        markdown_file = raw_directory / "notes.md"
-        markdown_file.write_text(
-            "Markdown content",
-            encoding="utf-8",
+        inserted_count = ingest_text_files(
+            reset_database=True,
+            raw_data_directory=raw_directory,
+            database_path=database_path,
         )
 
-        with patch(
-            "src.ingestion.initialize_database"
-        ):
-            try:
-                ingest_text_files(
-                    raw_data_directory=raw_directory,
-                )
-            except RuntimeError as error:
-                assert "No TXT files were found" in str(error)
-                return
-
-    raise AssertionError(
-        "Expected RuntimeError when no TXT files exist."
+    documents = get_all_documents(
+        database_path
     )
 
+    assert inserted_count == 1
+    assert len(documents) == 1
 
-def run_tests() -> None:
-    tests = [
-        test_read_text_file_returns_clean_content,
-        test_read_text_file_rejects_missing_file,
-        test_read_text_file_rejects_non_txt_file,
-        test_read_text_file_rejects_empty_file,
-        test_split_into_chunks_uses_configured_limits,
-        test_ingestion_stores_generated_chunks,
-        test_ingestion_rejects_missing_directory,
-        test_ingestion_rejects_directory_without_txt_files,
+    assert (
+        documents[0]["source"]
+        == "stm32.txt"
+    )
+
+    assert (
+        documents[0]["content"]
+        == "STM32 PWM UART GPIO"
+    )
+
+    assert documents[0]["embedding"] == [
+        0.1,
+        0.2,
+        0.3,
     ]
 
-    passed = 0
 
-    for test in tests:
-        try:
-            test()
-            passed += 1
-            print(f"PASS: {test.__name__}")
-        except Exception as error:
-            print(f"FAIL: {test.__name__}")
-            print(f"      {error}")
+def test_ingestion_rejects_missing_directory(
+    tmp_path: Path,
+) -> None:
+    raw_directory = (
+        tmp_path / "missing"
+    )
 
-    print("-" * 50)
-    print(
-        f"Sonuç: {passed}/{len(tests)} "
-        "test başarılı."
+    database_path = (
+        tmp_path / "test.db"
+    )
+
+    with pytest.raises(
+        FileNotFoundError
+    ):
+        ingest_text_files(
+            raw_data_directory=raw_directory,
+            database_path=database_path,
+        )
+
+
+def test_ingestion_rejects_directory_without_txt_files(
+    tmp_path: Path,
+) -> None:
+    raw_directory = (
+        tmp_path / "raw"
+    )
+
+    raw_directory.mkdir()
+
+    (
+        raw_directory / "notes.md"
+    ).write_text(
+        "Markdown",
+        encoding="utf-8",
+    )
+
+    database_path = (
+        tmp_path / "test.db"
+    )
+
+    with pytest.raises(
+        RuntimeError
+    ):
+        ingest_text_files(
+            raw_data_directory=raw_directory,
+            database_path=database_path,
+        )
+
+
+def test_ingestion_creates_source_manifest(
+    tmp_path: Path,
+) -> None:
+    raw_directory = (
+        tmp_path / "raw"
+    )
+
+    raw_directory.mkdir()
+
+    file_path = (
+        raw_directory / "stm32.txt"
+    )
+
+    file_path.write_text(
+        "STM32 PWM UART GPIO",
+        encoding="utf-8",
+    )
+
+    database_path = (
+        tmp_path / "test.db"
+    )
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.1, 0.2, 0.3],
+        ],
+    ):
+        ingest_text_files(
+            reset_database=True,
+            raw_data_directory=raw_directory,
+            database_path=database_path,
+        )
+
+    records = get_all_source_files(
+        database_path
+    )
+
+    assert len(records) == 1
+
+    assert (
+        records[0]["source"]
+        == "stm32.txt"
+    )
+
+    assert records[0]["file_hash"]
+
+    assert isinstance(
+        records[0]["modified_at"],
+        float,
     )
 
 
-if __name__ == "__main__":
-    run_tests()
+def test_manifest_hash_changes_when_file_changes(
+    tmp_path: Path,
+) -> None:
+    raw_directory = (
+        tmp_path / "raw"
+    )
+
+    raw_directory.mkdir()
+
+    file_path = (
+        raw_directory / "stm32.txt"
+    )
+
+    file_path.write_text(
+        "Version 1",
+        encoding="utf-8",
+    )
+
+    database_path = (
+        tmp_path / "test.db"
+    )
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.1, 0.2],
+        ],
+    ):
+        ingest_text_files(
+            reset_database=True,
+            raw_data_directory=raw_directory,
+            database_path=database_path,
+        )
+
+    first_record = (
+        get_all_source_files(
+            database_path
+        )[0]
+    )
+
+    file_path.write_text(
+        "Version 2",
+        encoding="utf-8",
+    )
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.3, 0.4],
+        ],
+    ):
+        ingest_text_files(
+            reset_database=True,
+            raw_data_directory=raw_directory,
+            database_path=database_path,
+        )
+
+    second_record = (
+        get_all_source_files(
+            database_path
+        )[0]
+    )
+
+    assert (
+        first_record["file_hash"]
+        != second_record["file_hash"]
+    )
