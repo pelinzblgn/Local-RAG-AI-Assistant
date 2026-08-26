@@ -1,294 +1,185 @@
 # Local RAG AI Assistant
 
-A fully local Retrieval-Augmented Generation (RAG) assistant built with Microsoft Foundry Local SDK, Phi-4 Mini, Qwen3 Embedding, SQLite, and semantic document retrieval.
+A privacy-focused, fully local Retrieval-Augmented Generation (RAG) assistant built with Python, Microsoft Foundry Local, Phi-4 Mini, local embeddings, and SQLite.
 
-![Python](https://img.shields.io/badge/Python-3.13-blue)
-![Tests](https://img.shields.io/badge/Tests-126%20Passed-success)
-![Status](https://img.shields.io/badge/Phase-2%20In%20Progress-yellow)
+The system retrieves relevant information from a local knowledge base, evaluates retrieval confidence, filters noisy context, handles conversational follow-up questions, and generates grounded answers using a locally running language model.
 
-The project implements an end-to-end local RAG pipeline capable of ingesting documents, generating embeddings locally, retrieving semantically relevant context, and producing grounded answers using a locally running language model.
+The project is designed around three core principles:
 
-No external cloud inference API is required for the core RAG workflow.
-
----
-
-# Features
-
-- Fully local RAG execution
-- Microsoft Foundry Local SDK
-- Phi-4 Mini local chat model
-- Qwen3 local embedding model
-- SQLite-based document and embedding storage
-- Semantic similarity retrieval
-- Configurable Top-K retrieval
-- Smart character-based chunking with overlap
-- Prompt grounding
-- Source attribution
-- Retrieval scores and metadata
-- Conversation memory
-- `/history` command
-- `/clear` command
-- Local model warm-up
-- Incremental document ingestion
-- Knowledge-base reset
-- Knowledge-base statistics
-- Retrieval evaluation framework
-- Hit Rate and Mean Reciprocal Rank evaluation
-- Cold-start and warm retrieval latency measurement
-- Structured logging
-- Modular architecture
-- Automated unit tests
+- Local-first AI
+- Grounded and explainable responses
+- Measurable RAG quality
 
 ---
 
-# Project Structure
+## Overview
+
+Local RAG AI Assistant allows users to query local documents without relying on a cloud-hosted language model.
+
+Instead of sending documents and questions to an external AI service, the system performs the main RAG pipeline locally:
+
+1. Local documents are ingested.
+2. Documents are divided into chunks.
+3. Embeddings are generated locally.
+4. Chunks and embeddings are stored in SQLite.
+5. User questions are converted into embeddings.
+6. Semantically relevant chunks are retrieved.
+7. Retrieval confidence is evaluated.
+8. Weak or noisy context is filtered.
+9. Relevant context is sent to a local language model.
+10. The answer is generated using only trusted local evidence.
+
+If sufficient evidence cannot be found, the system refuses to generate an unsupported answer and returns a controlled fallback response.
+
+---
+
+## Key Features
+
+### Fully Local RAG Pipeline
+
+The main RAG workflow runs locally using:
+
+- Python
+- Microsoft Foundry Local
+- Phi-4 Mini
+- Local embedding model
+- SQLite
+
+This architecture reduces dependency on external AI APIs and provides greater control over local data.
+
+---
+
+### Semantic Retrieval
+
+User questions are converted into embeddings and compared against document embeddings using semantic similarity.
+
+The retrieval layer returns the most relevant document chunks rather than relying only on keyword matching.
+
+---
+
+### Confidence-Aware Retrieval
+
+The system does not blindly trust every retrieved result.
+
+A dedicated confidence engine evaluates retrieval quality using signals such as:
+
+- Top similarity score
+- Second-best similarity score
+- Score separation
+- Evidence coverage
+- Selected context count
+- Filtered context count
+
+Retrieval confidence is classified into:
+
+- `HIGH`
+- `MEDIUM`
+- `LOW`
+
+Low-confidence retrieval can prevent the language model from being called.
+
+---
+
+### Evidence Coverage
+
+Semantic similarity alone does not guarantee that a retrieved document directly supports a question.
+
+The system therefore evaluates how much direct evidence exists between the current question and retrieved context.
+
+This provides an additional protection layer against semantically similar but factually irrelevant retrieval results.
+
+---
+
+### Adaptive Context Filtering
+
+Instead of automatically sending every Top-K result to the language model, the assistant dynamically selects the strongest context.
+
+For example:
 
 ```text
-Local-RAG-AI-Assistant/
-│
-├── data/
-│   └── raw/
-│       ├── foundry_local_notes.txt
-│       ├── pid_notes.txt
-│       ├── rag_notes.txt
-│       ├── sqlite_notes.txt
-│       └── stm32_notes.txt
-│
-├── database/
-│   └── rag.db
-│
-├── evaluation/
-│   └── evaluation_cases.py
-│
-├── src/
-│   ├── __init__.py
-│   ├── assistant.py
-│   ├── chunker.py
-│   ├── cli.py
-│   ├── config.py
-│   ├── database.py
-│   ├── document_loader.py
-│   ├── embeddings.py
-│   ├── evaluation.py
-│   ├── ingestion.py
-│   ├── llm.py
-│   ├── logging_config.py
-│   ├── memory.py
-│   ├── prompts.py
-│   ├── retrieval.py
-│   ├── similarity.py
-│   └── utils.py
-│
-├── tests/
-│   ├── __init__.py
-│   ├── test_assistant.py
-│   ├── test_chunking.py
-│   ├── test_cli.py
-│   ├── test_database.py
-│   ├── test_embeddings.py
-│   ├── test_evaluation.py
-│   ├── test_ingestion.py
-│   ├── test_llm.py
-│   ├── test_main.py
-│   ├── test_memory.py
-│   ├── test_prompts.py
-│   ├── test_retrieval.py
-│   └── test_similarity.py
-│
-├── .gitignore
-├── main.py
-├── requirements.txt
-├── run_evaluation.py
-├── run_tests.py
-└── README.md
+Retrieved scores:
+
+0.80
+0.74
+0.31
+
+Selected context:
+
+0.80
+0.74
+
+Filtered noise:
+
+0.31
 ```
 
-> Runtime-generated files such as the SQLite database, virtual environment, Python cache files, and pytest cache are excluded from version control where appropriate.
+This reduces irrelevant context and improves grounding.
 
 ---
 
-# Architecture
+### Grounded Answer Generation
+
+The prompt layer explicitly instructs the local model to:
+
+- Use only supplied local document evidence
+- Avoid outside knowledge
+- Avoid unsupported assumptions
+- Avoid inventing source names
+- Return a controlled fallback when evidence is insufficient
+
+Source rendering is handled by the application rather than being trusted to the language model.
+
+---
+
+### Controlled Fallback Protection
+
+When local documents do not provide enough evidence, the assistant returns:
 
 ```text
-Local TXT Documents
-        │
-        ▼
-Document Loader
-        │
-        ▼
-Smart Chunking
-        │
-        ▼
-Qwen3 Embedding Model
-        │
-        ▼
-SQLite Knowledge Base
-        │
-        ▼
-Semantic Similarity Search
-        │
-        ▼
-Top-K Relevant Documents
-        │
-        ▼
-Conversation Context
-        │
-        ▼
-Grounded Prompt Builder
-        │
-        ▼
-Phi-4 Mini
-        │
-        ▼
-Grounded Local Answer
-        │
-        ▼
-Sources + Retrieval Metadata
+Bu bilgi mevcut yerel belgelerde bulunamadı.
 ```
 
----
+This prevents the system from answering unrelated questions using unsupported model knowledge.
 
-# Technologies
-
-| Technology | Purpose |
-|---|---|
-| Python 3.13 | Core application |
-| Microsoft Foundry Local SDK | Local AI runtime |
-| Phi-4 Mini | Local language model |
-| Qwen3 Embedding | Local embedding generation |
-| SQLite | Local knowledge-base storage |
-| PyTest | Automated testing |
-
----
-
-# Installation
-
-## 1. Clone the repository
-
-```bash
-git clone <repository-url>
-cd Local-RAG-AI-Assistant
-```
-
-## 2. Create a virtual environment
-
-```bash
-python -m venv venv
-```
-
-## 3. Activate the environment
-
-Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-## 4. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-# Knowledge Base
-
-Place source `.txt` documents inside:
+Example:
 
 ```text
-data/raw/
+Question:
+Fransa'nın başkenti nedir?
+
+Answer:
+Bu bilgi mevcut yerel belgelerde bulunamadı.
 ```
 
-The ingestion pipeline:
+even though the underlying language model may know the answer.
 
-1. discovers source documents,
-2. loads their content,
-3. splits them into overlapping chunks,
-4. generates local embeddings,
-5. stores chunks and embeddings in SQLite.
+This behavior is intentional and is part of the grounding architecture.
 
 ---
 
-# Application Commands
+### Trusted Source Attribution
 
-## Start Chat
+Sources are derived from the application's selected retrieval context.
 
-```bash
-python main.py --chat
-```
-
-Running without an explicit mode also starts the chat interface:
-
-```bash
-python main.py
-```
-
----
-
-## Incremental Ingestion
-
-```bash
-python main.py --ingest
-```
-
-Processes the source documents while preserving the existing knowledge base.
-
----
-
-## Reset Knowledge Base
-
-```bash
-python main.py --reset
-```
-
-Rebuilds the local knowledge base from the source documents.
-
----
-
-## Knowledge Base Statistics
-
-```bash
-python main.py --stats
-```
-
-Displays information about the current local knowledge base.
-
----
-
-# Chat Commands
-
-While the assistant is running:
+Example:
 
 ```text
-/history
+RAG CEVABI
+==================================================
+STM32, STMicroelectronics tarafından geliştirilen
+ARM tabanlı mikrodenetleyici ailesidir.
+
+Kaynaklar:
+- stm32_notes.txt
 ```
 
-Displays the current conversation history.
-
-```text
-/clear
-```
-
-Clears the current conversation memory.
-
-Exit commands:
-
-```text
-exit
-quit
-q
-çık
-çıkış
-```
+The language model is not responsible for inventing or selecting source filenames.
 
 ---
 
-# Conversation Memory
+### Conversational Query Rewriting
 
-The assistant maintains a bounded conversation history during the active session.
-
-Recent conversation turns can be incorporated into retrieval queries, allowing follow-up questions to retain useful context without allowing the conversation history to grow indefinitely.
+The assistant supports contextual follow-up questions.
 
 Example:
 
@@ -297,136 +188,300 @@ User:
 STM32 nedir?
 
 User:
-Peki onun PWM ile ilişkisi nedir?
+Peki PWM ne işe yarar?
 ```
 
-The second query can use recent conversational context to improve retrieval.
-
----
-
-# Model Warm-Up
-
-Before an interactive chat session starts, the local embedding and chat models are initialized.
+The second question can be transformed internally into a retrieval query containing relevant conversational context.
 
 Example:
 
 ```text
-Yerel modeller hazırlanıyor...
+Original Query:
+Peki PWM ne işe yarar?
 
-Embedding modeli warm-up tamamlandı.
-Chat modeli warm-up tamamlandı.
-
-Modeller hazır.
+Retrieval Query:
+STM32 nedir? Peki PWM ne işe yarar?
 ```
 
-This moves most model initialization cost to application startup instead of the first user query.
+This improves retrieval performance for follow-up questions while preventing unrelated standalone questions from unnecessarily inheriting previous context.
 
 ---
 
-# Retrieval Metadata
+### Conversation Memory
 
-The CLI displays the documents selected by semantic retrieval together with their similarity scores.
+The assistant maintains bounded in-session conversation memory.
+
+Memory is used for:
+
+- Follow-up interpretation
+- Query rewriting
+- Conversation history
+
+Available CLI commands include:
+
+```text
+/history
+/clear
+```
+
+Conversation memory remains separate from the permanent document knowledge base.
+
+---
+
+### Smart Folder Synchronization
+
+The knowledge base supports synchronization of local document changes.
+
+The synchronization layer can identify:
+
+- New files
+- Modified files
+- Deleted files
+- Unchanged files
 
 Example:
 
 ```text
-RETRIEVED DOCUMENTS
+KNOWLEDGE BASE SYNC
 ==================================================
-
-[1]
-Source : stm32_notes.txt
-Score  : 0.6540
-
-[2]
-Source : pid_notes.txt
-Score  : 0.3887
-
-[3]
-Source : rag_notes.txt
-Score  : 0.3803
+New files      : 1
+Modified files : 1
+Deleted files  : 0
+Unchanged      : 3
+Inserted chunks: 4
+Deleted chunks : 2
 ```
 
-This makes the retrieval process observable and easier to evaluate.
+Synchronization can be triggered from the CLI using:
+
+```text
+/sync
+```
+
+This avoids unnecessarily rebuilding the entire knowledge base when only a subset of files changes.
 
 ---
 
-# Retrieval Evaluation
-
-The project includes a dedicated evaluation framework for measuring retrieval quality and performance.
-
-Run:
-
-```bash
-python run_evaluation.py
-```
-
-The current evaluation set contains seven retrieval cases covering the sample knowledge base.
-
-Current observed result:
+## Architecture
 
 ```text
-Cases                  : 7
-Hit Rate               : 100.00%
-MRR                    : 1.0000
-Cold Start             : 10.0476 s
-Avg Retrieval Time     : 1.8100 s
-Warm Avg Retrieval     : 0.4371 s
-Median Retrieval       : 0.4319 s
-Fastest Retrieval      : 0.4261 s
-Slowest Retrieval      : 10.0476 s
+                    LOCAL DOCUMENTS
+                           |
+                           v
+                 +-------------------+
+                 | Smart Folder Sync |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Document Ingestion|
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 |    Chunking       |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Local Embeddings  |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | SQLite Vector Data|
+                 +-------------------+
+
+                           |
+                           |
+                    USER QUESTION
+                           |
+                           v
+                 +-------------------+
+                 | Query Rewriter    |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Semantic Retrieval|
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Evidence Coverage |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Confidence Engine |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Adaptive Context  |
+                 | Filtering         |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Grounded Prompt   |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Phi-4 Mini        |
+                 | Foundry Local     |
+                 +-------------------+
+                           |
+                           v
+                 +-------------------+
+                 | Fallback + Source |
+                 | Validation        |
+                 +-------------------+
+                           |
+                           v
+                       ANSWER
 ```
-
-The results show that the expected source was successfully retrieved for every current evaluation case and ranked first in each case.
-
-The latency measurements also separate model cold-start cost from normal warm retrieval performance.
-
-> These measurements correspond to the current small evaluation dataset and local development environment and should not be interpreted as general benchmark results.
 
 ---
 
-# Testing
-
-Run the complete automated test suite:
-
-```bash
-python -m pytest tests -q
-```
-
-Current status:
+## Project Structure
 
 ```text
-126 passed
+Local-RAG-AI-Assistant/
+|
+|-- data/
+|   `-- ...
+|
+|-- database/
+|   `-- rag.db
+|
+|-- evaluation/
+|   `-- evaluation_cases.py
+|
+|-- src/
+|   |-- assistant.py
+|   |-- cli.py
+|   |-- confidence.py
+|   |-- config.py
+|   |-- database.py
+|   |-- embeddings.py
+|   |-- evaluation.py
+|   |-- file_sync.py
+|   |-- ingestion.py
+|   |-- llm.py
+|   |-- logging_config.py
+|   |-- memory.py
+|   |-- prompts.py
+|   |-- query_rewriter.py
+|   `-- retrieval.py
+|
+|-- tests/
+|   |-- test_assistant.py
+|   |-- test_cli.py
+|   |-- test_confidence.py
+|   |-- test_database.py
+|   |-- test_evaluation.py
+|   |-- test_file_sync.py
+|   |-- test_ingestion.py
+|   |-- test_main.py
+|   |-- test_memory.py
+|   |-- test_prompts.py
+|   |-- test_query_rewriter.py
+|   `-- ...
+|
+|-- main.py
+|-- run_evaluation.py
+|-- requirements.txt
+`-- README.md
 ```
-
-For verbose output:
-
-```bash
-python -m pytest tests -v
-```
-
-The test suite covers major components including:
-
-- chunking
-- database operations
-- embedding validation
-- ingestion
-- semantic retrieval
-- similarity calculations
-- prompt construction
-- local LLM integration
-- conversation memory
-- assistant orchestration
-- CLI behavior
-- application modes
-- retrieval evaluation
 
 ---
 
-# Example
+## Technology Stack
+
+| Component | Technology |
+|---|---|
+| Programming Language | Python |
+| Local Model Runtime | Microsoft Foundry Local |
+| Chat Model | Phi-4 Mini |
+| Embedding Model | Qwen3 Embedding 0.6B |
+| Database | SQLite |
+| Retrieval | Cosine Similarity |
+| Testing | Pytest |
+| Interface | CLI |
+
+---
+
+## RAG Pipeline
+
+### 1. Document Ingestion
+
+Local documents are read and validated before being added to the knowledge base.
+
+### 2. Chunking
+
+Documents are divided into smaller overlapping chunks to improve retrieval precision.
+
+### 3. Embedding Generation
+
+Each chunk is converted into a vector representation using a locally running embedding model.
+
+### 4. Local Storage
+
+Document content, source information, and embeddings are stored in SQLite.
+
+### 5. Query Processing
+
+The user's question is cleaned and analyzed.
+
+When necessary, conversational context is incorporated through query rewriting.
+
+### 6. Semantic Retrieval
+
+The query embedding is compared with stored document embeddings using cosine similarity.
+
+### 7. Confidence Evaluation
+
+Retrieved results are analyzed for semantic strength and supporting evidence.
+
+### 8. Context Selection
+
+Weak retrieval results are filtered before prompt construction.
+
+### 9. Grounded Generation
+
+Only selected local evidence is supplied to Phi-4 Mini.
+
+### 10. Output Validation
+
+Fallback behavior and trusted source attribution are applied before returning the final result.
+
+---
+
+## CLI Usage
+
+Start the assistant with:
+
+```bash
+python main.py --chat
+```
+
+Example:
 
 ```text
+Local RAG AI Assistant
+--------------------------------------------------
+Çıkmak için 'exit', 'quit', 'q' veya 'çıkış' yaz.
+Komutlar: /clear, /history, /sync
+
 Soru: STM32 nedir?
+```
 
+Example response:
+
+```text
+==================================================
 RAG CEVABI
 ==================================================
 
@@ -435,122 +490,370 @@ ARM tabanlı mikrodenetleyici ailesidir.
 
 Kaynaklar:
 - stm32_notes.txt
+```
+
+---
+
+## Retrieval Transparency
+
+The CLI exposes retrieval metadata for development and evaluation.
+
+Example:
+
+```text
+==================================================
+QUERY REWRITE
+==================================================
+Rewritten       : YES
+Original Query  : Peki PWM ne işe yarar?
+Retrieval Query : STM32 nedir? Peki PWM ne işe yarar?
+
+==================================================
+RETRIEVAL CONFIDENCE
+==================================================
+Level            : HIGH
+Top Score        : 0.6835
+Second Score     : 0.4053
+Score Gap        : 0.2782
+Evidence Coverage: 100.00%
+Selected Context : 1/3
+Filtered Noise   : 2
 
 ==================================================
 RETRIEVED DOCUMENTS
 ==================================================
-
 [1]
 Source : stm32_notes.txt
-Score  : 0.6540
+Score  : 0.6835
 ```
 
----
-
-# Current Capabilities
-
-The current implementation supports:
-
-- local TXT document ingestion
-- overlapping text chunking
-- local embedding generation
-- SQLite knowledge-base storage
-- semantic retrieval
-- configurable Top-K selection
-- grounded local generation
-- source attribution
-- retrieval metadata
-- conversational context
-- session history management
-- embedding and chat model warm-up
-- incremental ingestion
-- full knowledge-base reset
-- knowledge-base statistics
-- retrieval quality evaluation
-- retrieval latency evaluation
-- automated unit testing
+This makes the system easier to debug and evaluate compared with a black-box RAG pipeline.
 
 ---
 
-# Development Roadmap
+## Evaluation Framework
 
-## Phase 1 — Core Local RAG Engine
+The project contains a dedicated retrieval evaluation framework.
 
-Completed.
+Evaluation cases define:
 
-- Local project architecture
-- Configuration management
-- SQLite storage
-- Document loading
-- Embedding generation
-- Cosine similarity
-- Semantic retrieval
-- Prompt construction
-- Local Phi-4 Mini integration
-- RAG assistant orchestration
-- Initial automated testing
+```python
+EvaluationCase(
+    question="STM32 nedir?",
+    expected_sources=(
+        "stm32_notes.txt",
+    ),
+)
+```
 
-## Phase 2 — Reliability, Memory and Evaluation
+The framework measures retrieval behavior across multiple knowledge domains and harder cross-document questions.
 
-In progress.
+Current evaluation areas include:
 
-Completed so far:
-
-- Improved chunking with overlap
-- Conversation memory
-- Context-aware follow-up retrieval
-- Conversation history commands
-- Retrieval metadata visibility
-- Incremental ingestion
-- Knowledge-base reset
-- Knowledge-base statistics
-- Model warm-up
-- Retrieval evaluation framework
-- Hit Rate evaluation
-- Mean Reciprocal Rank evaluation
-- Cold-start and warm latency measurements
-- Expanded automated test coverage
-
-Remaining Phase 2 work will be completed and validated before Phase 3 begins.
-
-## Phase 3 — Application Layer
-
-Planned.
-
-Potential Phase 3 work includes:
-
-- API/backend layer
-- Web user interface
-- File upload workflow
-- Additional document formats
-- Retrieval improvements
-- Deployment and packaging improvements
+- STM32
+- PID and line following
+- RAG
+- SQLite
+- Foundry Local
+- Cross-document retrieval
 
 ---
 
-# Privacy
+## Evaluation Metrics
 
-The core RAG pipeline is designed to operate locally.
+The evaluation framework calculates metrics including:
 
-Documents, embeddings, retrieval operations, and language-model inference can remain on the local machine without requiring a cloud inference API.
+### Hit Rate
 
----
+Measures how often at least one expected source appears in the retrieved results.
 
-# Project Status
+### Mean Reciprocal Rank
 
-**Phase 2 — In Progress**
-
-Core RAG functionality is operational.
-
-Current validation status:
+Measures how highly the first relevant document is ranked.
 
 ```text
-Automated Tests : 126 passed
-Evaluation Cases: 7
-Hit Rate        : 100%
-MRR             : 1.0000
+MRR = mean(1 / rank of first relevant result)
+```
+
+### Retrieval Latency
+
+The evaluation framework measures:
+
+- Cold-start latency
+- Average retrieval latency
+- Warm average retrieval latency
+- Median latency
+- Minimum latency
+- Maximum latency
+
+Separating cold-start and warm retrieval performance provides a more realistic view of local model behavior.
+
+---
+
+## Quality Gate
+
+The project includes automated tests and evaluation checks designed to protect RAG quality during development.
+
+Quality dimensions include:
+
+```text
+Retrieval Quality
+Source Accuracy
+Fallback Accuracy
+Query Rewrite Behavior
+Confidence Classification
+Grounding Behavior
+Conversation Memory
+Database Integrity
+Document Ingestion
+Folder Synchronization
+```
+
+This means changes to retrieval, prompts, confidence policies, memory, or ingestion can be validated before being accepted into the stable system.
+
+---
+
+## Testing
+
+Run the complete test suite with:
+
+```bash
+python -m pytest tests -q
+```
+
+For verbose output:
+
+```bash
+python -m pytest tests -v
+```
+
+Individual components can also be tested independently.
+
+Examples:
+
+```bash
+python -m pytest tests/test_confidence.py -v
+```
+
+```bash
+python -m pytest tests/test_assistant.py -v
+```
+
+```bash
+python -m pytest tests/test_prompts.py -v
+```
+
+```bash
+python -m pytest tests/test_query_rewriter.py -v
+```
+
+```bash
+python -m pytest tests/test_file_sync.py -v
 ```
 
 ---
 
-Developed as part of the Microsoft AI Summer School.
+## Running Retrieval Evaluation
+
+Run:
+
+```bash
+python run_evaluation.py
+```
+
+The evaluation report includes:
+
+```text
+Cases
+Expected Sources
+Retrieved Sources
+Hit / Miss
+Reciprocal Rank
+Latency
+Hit Rate
+MRR
+Cold Start
+Warm Average Retrieval
+Median Retrieval
+Fastest Retrieval
+Slowest Retrieval
+```
+
+This makes retrieval improvements measurable instead of relying only on manual testing.
+
+---
+
+## Reliability and Safety Design
+
+Several mechanisms are used to reduce unsupported answers.
+
+### Retrieval Thresholding
+
+Weak semantic matches can be rejected before generation.
+
+### Evidence Validation
+
+High vector similarity alone is not treated as sufficient proof that a document answers the question.
+
+### Adaptive Context Selection
+
+Irrelevant Top-K results are removed before generation.
+
+### Strict Grounding Prompt
+
+The model is instructed to rely exclusively on supplied local evidence.
+
+### Controlled Fallback
+
+Unsupported questions receive a deterministic fallback response.
+
+### Trusted Source Handling
+
+Source attribution is controlled by application logic.
+
+### Query Rewrite Isolation
+
+Conversational context is added only when a question is determined to be a follow-up.
+
+Together, these layers create a defense-in-depth approach to RAG grounding.
+
+---
+
+## Privacy
+
+The project follows a local-first architecture.
+
+The RAG pipeline is designed so that:
+
+- Documents remain in the local knowledge base.
+- Embeddings are generated locally.
+- The chat model runs locally through Foundry Local.
+- Conversation memory is maintained inside the application session.
+- SQLite stores the knowledge base locally.
+
+This architecture is suitable for experimentation with private or offline document-assistant workflows where cloud-based inference may not be desirable.
+
+---
+
+## Current Development Status
+
+The core RAG architecture currently includes:
+
+- [x] Local LLM integration
+- [x] Local embedding generation
+- [x] SQLite knowledge base
+- [x] Document ingestion
+- [x] Semantic retrieval
+- [x] Cosine similarity ranking
+- [x] Confidence-aware retrieval
+- [x] Evidence coverage analysis
+- [x] Adaptive context filtering
+- [x] Controlled fallback behavior
+- [x] Trusted source attribution
+- [x] Conversation memory
+- [x] Conversational query rewriting
+- [x] Smart folder synchronization
+- [x] Retrieval evaluation framework
+- [x] Automated test suite
+- [x] Retrieval latency measurement
+- [x] Quality validation
+
+---
+
+## Planned Improvements
+
+Future development may include:
+
+- [ ] PDF document support
+- [ ] DOCX document support
+- [ ] Richer document metadata
+- [ ] Metadata-aware retrieval
+- [ ] Improved chunking strategies
+- [ ] Larger evaluation datasets
+- [ ] Additional retrieval metrics
+- [ ] Hybrid semantic and lexical retrieval
+- [ ] Reranking experiments
+- [ ] Graphical user interface
+- [ ] Packaged local desktop application
+
+---
+
+## Design Philosophy
+
+The goal of this project is not simply to connect a language model to a vector search system.
+
+The project focuses on building a RAG pipeline that is:
+
+**Local**  
+Models and document processing are designed around local execution.
+
+**Grounded**  
+Answers should be supported by retrieved evidence.
+
+**Transparent**  
+Retrieval scores, confidence, evidence coverage, and query rewriting can be inspected.
+
+**Testable**  
+Core behavior is protected by automated tests.
+
+**Measurable**  
+Retrieval quality and latency are evaluated using explicit metrics.
+
+**Maintainable**  
+Retrieval, generation, memory, synchronization, prompting, confidence, and evaluation are separated into dedicated modules.
+
+---
+
+## Example
+
+```text
+User:
+STM32 nedir?
+
+Assistant:
+STM32, STMicroelectronics tarafından geliştirilen
+ARM tabanlı mikrodenetleyici ailesidir.
+
+Sources:
+stm32_notes.txt
+
+Confidence:
+HIGH
+```
+
+Unsupported query:
+
+```text
+User:
+Fransa'nın başkenti nedir?
+
+Assistant:
+Bu bilgi mevcut yerel belgelerde bulunamadı.
+
+Confidence:
+LOW
+```
+
+The second example demonstrates an important property of the system: the assistant prioritizes document grounding over the language model's general knowledge.
+
+---
+
+## License
+
+This project is currently intended for educational and experimental use.
+
+---
+
+## Author
+
+**Pelin Özbilgin**
+
+Computer Engineering Student
+
+Areas of interest:
+
+- Artificial Intelligence
+- Retrieval-Augmented Generation
+- Local AI Systems
+- Embedded Systems
+- Software Development
