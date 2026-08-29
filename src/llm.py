@@ -15,6 +15,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "Answer clearly, accurately, and concisely."
 )
 
+WARM_UP_PROMPT = "Respond with OK."
+
 
 def _clean_prompt(
     prompt: str,
@@ -68,6 +70,7 @@ class LocalLLM:
         self._model_alias = clean_model_alias
         self._model: Any | None = None
         self._client: Any | None = None
+        self._is_warmed_up = False
 
     @property
     def model_alias(self) -> str:
@@ -117,7 +120,6 @@ class LocalLLM:
             logger.info(
                 "Chat modeli belleğe yükleniyor."
             )
-
             model.load()
 
         self._model = model
@@ -186,40 +188,80 @@ class LocalLLM:
 
         return clean_answer
 
+    def warm_up(self) -> None:
+        """
+        Load the model and perform a minimal inference warm-up.
+
+        This helps initialize runtime components before the first
+        real user request.
+        """
+
+        if self._is_warmed_up:
+            return
+
+        client = self._ensure_client()
+
+        logger.info(
+            "Chat modeli inference warm-up başlatılıyor."
+        )
+
+        response = client.complete_chat(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are performing a runtime warm-up. "
+                        "Reply only with OK."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": WARM_UP_PROMPT,
+                },
+            ]
+        )
+
+        if not response.choices:
+            raise RuntimeError(
+                "Chat model warm-up returned no response choices."
+            )
+
+        self._is_warmed_up = True
+
+        logger.info(
+            "Chat modeli warm-up tamamlandı."
+        )
+
     def unload(self) -> None:
-        """Unload the model and clear the cached client."""
+        """
+        Unload the model and clear cached runtime state.
+        """
 
         if self.is_loaded:
             logger.info(
                 "Chat modeli bellekten kaldırılıyor."
             )
-
             self._model.unload()
 
         self._model = None
         self._client = None
+        self._is_warmed_up = False
 
     def __enter__(self) -> "LocalLLM":
-        """Return the LLM instance."""
+        """
+        Return the LLM instance.
+        """
 
         return self
-    def warm_up(self) -> None:
-        """
-        Load and prepare the local chat model before the first request.
-        """
 
-        self._ensure_client()
-
-        logger.info(
-            "Chat modeli warm-up tamamlandı."
-        )
-    
     def __exit__(
         self,
         exception_type: object,
         exception_value: object,
         traceback: object,
     ) -> None:
-        """Unload the model when leaving the context block."""
+        """
+        Unload the model when leaving the context block.
+        """
 
         self.unload()
