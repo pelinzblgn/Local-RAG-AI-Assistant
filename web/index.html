@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Local RAG AI Workspace</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/styles.css"
+    >
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <!-- =================================================
+             SIDEBAR
+             ================================================= -->
+
+        <aside class="sidebar">
+
+            <div class="brand">
+
+                <div class="brand-mark">
+                    LR
+                </div>
+
+                <div>
+                    <h1>Local RAG</h1>
+                    <p>AI Workspace</p>
+                </div>
+
+            </div>
+
+
+            <div class="local-status">
+
+                <span class="status-dot"></span>
+
+                <div>
+
+                    <strong>
+                        LOCAL ONLY
+                    </strong>
+
+                    <p>
+                        Foundry Local runtime
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 KNOWLEDGE BASE
+                 ================================================= -->
+
+            <section class="sidebar-card">
+
+                <div class="section-heading">
+
+                    <span>
+                        Knowledge Base
+                    </span>
+
+                    <span
+                        id="source-count"
+                        class="count-badge"
+                    >
+                        0
+                    </span>
+
+                </div>
+
+
+                <div
+                    id="source-list"
+                    class="source-list"
+                >
+                    <p class="muted">
+                        Kaynaklar yükleniyor...
+                    </p>
+                </div>
+
+
+                <button
+                    id="sync-button"
+                    class="secondary-button"
+                    type="button"
+                >
+                    Sync Knowledge Base
+                </button>
+
+            </section>
+
+
+            <!-- =================================================
+                 SESSION
+                 ================================================= -->
+
+            <section class="sidebar-card">
+
+                <div class="section-heading">
+
+                    <span>
+                        Session
+                    </span>
+
+                </div>
+
+
+                <button
+                    id="clear-button"
+                    class="secondary-button danger"
+                    type="button"
+                >
+                    Clear Conversation
+                </button>
+
+            </section>
+
+
+            <!-- =================================================
+                 SIDEBAR FOOTER
+                 ================================================= -->
+
+            <div class="sidebar-footer">
+
+                <span>
+                    Microsoft Foundry Local
+                </span>
+
+                <span>
+                    Phi-4 Mini
+                </span>
+
+                <span>
+                    Privacy-first local AI
+                </span>
+
+            </div>
+
+        </aside>
+
+
+        <!-- =================================================
+             MAIN WORKSPACE
+             ================================================= -->
+
+        <main class="workspace">
+
+            <!-- =================================================
+                 TOP BAR
+                 ================================================= -->
+
+            <header class="topbar">
+
+                <div>
+
+                    <p class="eyebrow">
+                        PRIVATE LOCAL AI WORKSPACE
+                    </p>
+
+                    <h2 id="workspace-title">
+                        Ask your local knowledge base
+                    </h2>
+
+                    <p id="workspace-description">
+                        Answers are grounded only in your
+                        indexed local documents.
+                    </p>
+
+                </div>
+
+
+                <div class="health-card">
+
+                    <span
+                        id="health-dot"
+                        class="health-dot"
+                    ></span>
+
+                    <div>
+
+                        <strong id="health-title">
+                            Checking...
+                        </strong>
+
+                        <small id="health-detail">
+                            Local runtime
+                        </small>
+
+                    </div>
+
+                </div>
+
+            </header>
+
+
+            <!-- =================================================
+                 WORKSPACE MODE
+                 ================================================= -->
+
+            <section class="mode-bar">
+
+                <div
+                    class="mode-switch"
+                    role="group"
+                    aria-label="Workspace mode"
+                >
+
+                    <button
+                        id="assistant-mode-button"
+                        class="mode-button active"
+                        type="button"
+                        data-mode="assistant"
+                    >
+
+                        <span class="mode-icon">
+                            RAG
+                        </span>
+
+                        <span class="mode-button-copy">
+
+                            <strong>
+                                Assistant
+                            </strong>
+
+                            <small>
+                                Direct grounded retrieval
+                            </small>
+
+                        </span>
+
+                    </button>
+
+
+                    <button
+                        id="agent-mode-button"
+                        class="mode-button"
+                        type="button"
+                        data-mode="agent"
+                    >
+
+                        <span class="mode-icon">
+                            AG
+                        </span>
+
+                        <span class="mode-button-copy">
+
+                            <strong>
+                                Agent
+                            </strong>
+
+                            <small>
+                                Intent · tools · execution
+                            </small>
+
+                        </span>
+
+                    </button>
+
+                </div>
+
+
+                <div class="mode-status">
+
+                    <span
+                        id="mode-status-dot"
+                        class="mode-status-dot"
+                    ></span>
+
+                    <div>
+
+                        <strong id="mode-status-title">
+                            Assistant Mode
+                        </strong>
+
+                        <small id="mode-status-detail">
+                            Direct RAG pipeline
+                        </small>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 CHAT STREAM
+                 ================================================= -->
+
+            <section
+                id="chat-stream"
+                class="chat-stream"
+            >
+
+                <div
+                    id="welcome-card"
+                    class="welcome-card"
+                >
+
+                    <div class="welcome-icon">
+                        AI
+                    </div>
+
+                    <div>
+
+                        <h3 id="welcome-title">
+                            Local RAG AI Assistant
+                        </h3>
+
+                        <p id="welcome-description">
+                            Belgeleriniz hakkında soru sorun.
+                            Sistem yalnızca yerel knowledge base
+                            içeriğine dayanarak cevap verir.
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 COMPOSER
+                 ================================================= -->
+
+            <footer class="composer-wrapper">
+
+                <form
+                    id="chat-form"
+                    class="composer"
+                >
+
+                    <textarea
+                        id="question-input"
+                        rows="1"
+                        maxlength="2000"
+                        placeholder="Yerel belgeleriniz hakkında bir soru sorun..."
+                        aria-label="Question"
+                    ></textarea>
+
+
+                    <button
+                        id="send-button"
+                        type="submit"
+                    >
+                        Ask
+                    </button>
+
+                </form>
+
+
+                <div class="composer-meta">
+
+                    <span id="composer-mode-label">
+                        Local inference · Direct RAG
+                    </span>
+
+
+                    <div class="composer-actions">
+
+                        <button
+                            id="open-agent-trace"
+                            class="text-button hidden-control"
+                            type="button"
+                        >
+                            Agent Trace
+                        </button>
+
+
+                        <button
+                            id="open-diagnostics"
+                            class="text-button"
+                            type="button"
+                        >
+                            Retrieval Diagnostics
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </footer>
+
+        </main>
+
+    </div>
+
+
+    <!-- =====================================================
+         AGENT TRACE
+         ===================================================== -->
+
+    <aside
+        id="agent-panel"
+        class="diagnostics-panel agent-panel hidden"
+    >
+
+        <div class="diagnostics-header">
+
+            <div>
+
+                <p class="eyebrow">
+                    AGENT EXECUTION TRACE
+                </p>
+
+                <h3>
+                    Local Agent
+                </h3>
+
+            </div>
+
+
+            <button
+                id="close-agent-panel"
+                class="icon-button"
+                type="button"
+                aria-label="Close agent trace"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <!-- =================================================
+             AGENT METRICS
+             ================================================= -->
+
+        <div class="metrics-grid">
+
+            <div class="metric-card">
+
+                <span>
+                    Intent
+                </span>
+
+                <strong id="agent-intent">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span>
+                    Decision Confidence
+                </span>
+
+                <strong id="agent-confidence">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span>
+                    Selected Tool
+                </span>
+
+                <strong id="agent-tool">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span>
+                    Execution
+                </span>
+
+                <strong id="agent-execution">
+                    -
+                </strong>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             AGENT DECISION
+             ================================================= -->
+
+        <div class="diagnostics-section">
+
+            <h4>
+                Decision
+            </h4>
+
+
+            <div class="diagnostic-block">
+
+                <span>
+                    Reason
+                </span>
+
+                <p id="agent-reason">
+                    No agent execution yet.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             AGENT EXECUTION STEPS
+             ================================================= -->
+
+        <div class="diagnostics-section">
+
+            <h4>
+                Execution Steps
+            </h4>
+
+
+            <div
+                id="agent-steps"
+                class="agent-steps"
+            >
+
+                <p class="muted">
+                    Henüz agent çalıştırılmadı.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             AGENT EXECUTION ENVIRONMENT
+             ================================================= -->
+
+        <div class="diagnostics-section">
+
+            <h4>
+                Execution Environment
+            </h4>
+
+
+            <div class="diagnostic-row">
+
+                <span>
+                    Local Only
+                </span>
+
+                <strong id="agent-local-only">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="diagnostic-row">
+
+                <span>
+                    Result
+                </span>
+
+                <strong id="agent-result-status">
+                    -
+                </strong>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             AGENT TOOL RESULT
+             ================================================= -->
+
+        <div class="diagnostics-section">
+
+            <h4>
+                Tool Result
+            </h4>
+
+
+            <div class="diagnostic-row">
+
+                <span>
+                    Status
+                </span>
+
+                <strong id="agent-tool-result-status">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="diagnostic-block">
+
+                <span>
+                    Output
+                </span>
+
+                <p id="agent-tool-output">
+                    No tool result yet.
+                </p>
+
+            </div>
+
+        </div>
+
+    </aside>
+
+
+    <!-- =====================================================
+         RETRIEVAL DIAGNOSTICS
+         ===================================================== -->
+
+    <aside
+        id="diagnostics-panel"
+        class="diagnostics-panel hidden"
+    >
+
+        <div class="diagnostics-header">
+
+            <div>
+
+                <p class="eyebrow">
+                    RETRIEVAL DIAGNOSTICS
+                </p>
+
+                <h3>
+                    Explainable RAG
+                </h3>
+
+            </div>
+
+
+            <button
+                id="close-diagnostics"
+                class="icon-button"
+                type="button"
+                aria-label="Close diagnostics"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <!-- =================================================
+             RETRIEVAL METRICS
+             ================================================= -->
+
+        <div class="metrics-grid">
+
+            <div class="metric-card">
+
+                <span>
+                    Confidence
+                </span>
+
+                <strong id="metric-confidence">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span>
+                    Evidence
+                </span>
+
+                <strong id="metric-evidence">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span>
+                    Top Score
+                </span>
+
+                <strong id="metric-top-score">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span>
+                    Score Gap
+                </span>
+
+                <strong id="metric-score-gap">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span>
+                    Selected
+                </span>
+
+                <strong id="metric-selected">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span>
+                    Filtered Noise
+                </span>
+
+                <strong id="metric-filtered">
+                    -
+                </strong>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             QUERY REWRITE
+             ================================================= -->
+
+        <div class="diagnostics-section">
+
+            <h4>
+                Query Rewrite
+            </h4>
+
+
+            <div class="diagnostic-row">
+
+                <span>
+                    Rewritten
+                </span>
+
+                <strong id="rewrite-status">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="diagnostic-block">
+
+                <span>
+                    Original Query
+                </span>
+
+                <p id="original-query">
+                    -
+                </p>
+
+            </div>
+
+
+            <div class="diagnostic-block">
+
+                <span>
+                    Retrieval Query
+                </span>
+
+                <p id="retrieval-query">
+                    -
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             RETRIEVED DOCUMENTS
+             ================================================= -->
+
+        <div class="diagnostics-section">
+
+            <h4>
+                Retrieved Documents
+            </h4>
+
+
+            <div
+                id="retrieved-list"
+                class="retrieved-list"
+            >
+
+                <p class="muted">
+                    Henüz retrieval sonucu yok.
+                </p>
+
+            </div>
+
+        </div>
+
+    </aside>
+
+
+    <!-- =====================================================
+         SOURCE INSPECTOR
+         ===================================================== -->
+
+    <div
+        id="source-modal"
+        class="source-modal hidden"
+    >
+
+        <div
+            class="source-modal-backdrop"
+        ></div>
+
+
+        <div class="source-modal-card">
+
+            <div class="source-modal-header">
+
+                <div>
+
+                    <p class="eyebrow">
+                        SOURCE INSPECTOR
+                    </p>
+
+                    <h3 id="source-modal-title">
+                        Source
+                    </h3>
+
+                </div>
+
+
+                <button
+                    id="close-source-modal"
+                    class="icon-button"
+                    type="button"
+                    aria-label="Close source inspector"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <div class="source-score-row">
+
+                <span>
+                    Similarity Score
+                </span>
+
+                <strong id="source-modal-score">
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="source-content-box">
+
+                <span>
+                    Retrieved Evidence
+                </span>
+
+                <pre id="source-modal-content"></pre>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         TOAST
+         ===================================================== -->
+
+    <div
+        id="toast"
+        class="toast"
+        role="status"
+        aria-live="polite"
+    ></div>
+
+
+    <script src="/static/app.js"></script>
+
+</body>
+
+</html>
