@@ -18,6 +18,7 @@ class DocumentRecord(TypedDict):
     embedding: list[float]
     created_at: str
 
+
 class SourceFileRecord(TypedDict):
     """Metadata for an indexed source file."""
 
@@ -25,6 +26,7 @@ class SourceFileRecord(TypedDict):
     file_hash: str
     modified_at: float
     indexed_at: str
+
 
 def create_connection(
     database_path: Path = DATABASE_PATH,
@@ -47,8 +49,12 @@ def create_connection(
     )
 
     connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.execute("PRAGMA busy_timeout = 30000")
+    connection.execute(
+        "PRAGMA foreign_keys = ON"
+    )
+    connection.execute(
+        "PRAGMA busy_timeout = 30000"
+    )
 
     return connection
 
@@ -64,7 +70,9 @@ def database_connection(
     rolled back when an exception occurs.
     """
 
-    connection = create_connection(database_path)
+    connection = create_connection(
+        database_path
+    )
 
     try:
         yield connection
@@ -93,7 +101,9 @@ def initialize_database(
             for incremental synchronization.
     """
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS documents (
@@ -118,6 +128,7 @@ def initialize_database(
             """
         )
 
+
 def _validate_embedding(
     embedding: Sequence[float],
 ) -> list[float]:
@@ -136,17 +147,24 @@ def _validate_embedding(
     normalized_embedding: list[float] = []
 
     for value in embedding:
-        if isinstance(value, bool) or not isinstance(
-            value,
-            (int, float),
+        if (
+            isinstance(value, bool)
+            or not isinstance(
+                value,
+                (int, float),
+            )
         ):
             raise ValueError(
                 "Embedding must contain only numerical values."
             )
 
-        normalized_value = float(value)
+        normalized_value = float(
+            value
+        )
 
-        if not math.isfinite(normalized_value):
+        if not math.isfinite(
+            normalized_value
+        ):
             raise ValueError(
                 "Embedding cannot contain NaN or infinite values."
             )
@@ -163,8 +181,10 @@ def _serialize_embedding(
 ) -> str:
     """Validate an embedding and serialize it as JSON."""
 
-    normalized_embedding = _validate_embedding(
-        embedding
+    normalized_embedding = (
+        _validate_embedding(
+            embedding
+        )
     )
 
     return json.dumps(
@@ -193,7 +213,10 @@ def _deserialize_embedding(
             "Stored embedding contains invalid JSON."
         ) from error
 
-    if not isinstance(embedding, list):
+    if not isinstance(
+        embedding,
+        list,
+    ):
         raise ValueError(
             "Stored embedding must be a JSON list."
         )
@@ -229,15 +252,19 @@ def insert_document(
             "Document source cannot be empty."
         )
 
-    embedding_json = _serialize_embedding(
-        embedding
+    embedding_json = (
+        _serialize_embedding(
+            embedding
+        )
     )
 
     initialize_database(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         existing_row = connection.execute(
             """
             SELECT id
@@ -290,7 +317,9 @@ def get_all_documents(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         rows = connection.execute(
             """
             SELECT
@@ -309,11 +338,21 @@ def get_all_documents(
     for row in rows:
         documents.append(
             {
-                "id": int(row["id"]),
-                "content": str(row["content"]),
-                "source": str(row["source"]),
-                "embedding": _deserialize_embedding(
-                    str(row["embedding"])
+                "id": int(
+                    row["id"]
+                ),
+                "content": str(
+                    row["content"]
+                ),
+                "source": str(
+                    row["source"]
+                ),
+                "embedding": (
+                    _deserialize_embedding(
+                        str(
+                            row["embedding"]
+                        )
+                    )
                 ),
                 "created_at": str(
                     row["created_at"]
@@ -333,7 +372,9 @@ def get_document_count(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         row = connection.execute(
             """
             SELECT COUNT(*) AS document_count
@@ -349,6 +390,42 @@ def get_document_count(
     )
 
 
+def get_unique_document_sources(
+    database_path: Path = DATABASE_PATH,
+) -> list[str]:
+    """
+    Return unique sources that currently have indexed chunks.
+
+    The result represents the documents that are actually
+    available to the local RAG knowledge base.
+
+    Sources are returned in case-insensitive alphabetical order.
+    """
+
+    initialize_database(
+        database_path
+    )
+
+    with database_connection(
+        database_path
+    ) as connection:
+        rows = connection.execute(
+            """
+            SELECT DISTINCT source
+            FROM documents
+            WHERE TRIM(source) <> ''
+            ORDER BY source COLLATE NOCASE
+            """
+        ).fetchall()
+
+    return [
+        str(
+            row["source"]
+        )
+        for row in rows
+    ]
+
+
 def delete_all_documents(
     database_path: Path = DATABASE_PATH,
 ) -> None:
@@ -362,7 +439,9 @@ def delete_all_documents(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         connection.execute(
             "DELETE FROM documents"
         )
@@ -377,7 +456,8 @@ def delete_all_documents(
             WHERE name = 'documents'
             """
         )
-        
+
+
 def get_source_file(
     source: str,
     database_path: Path = DATABASE_PATH,
@@ -399,7 +479,9 @@ def get_source_file(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         row = connection.execute(
             """
             SELECT
@@ -419,8 +501,12 @@ def get_source_file(
         return None
 
     return {
-        "source": str(row["source"]),
-        "file_hash": str(row["file_hash"]),
+        "source": str(
+            row["source"]
+        ),
+        "file_hash": str(
+            row["file_hash"]
+        ),
         "modified_at": float(
             row["modified_at"]
         ),
@@ -441,7 +527,9 @@ def get_all_source_files(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         rows = connection.execute(
             """
             SELECT
@@ -456,7 +544,9 @@ def get_all_source_files(
 
     return [
         {
-            "source": str(row["source"]),
+            "source": str(
+                row["source"]
+            ),
             "file_hash": str(
                 row["file_hash"]
             ),
@@ -494,9 +584,15 @@ def upsert_source_file(
             "File hash cannot be empty."
         )
 
-    if isinstance(modified_at, bool) or not isinstance(
-        modified_at,
-        (int, float),
+    if (
+        isinstance(
+            modified_at,
+            bool,
+        )
+        or not isinstance(
+            modified_at,
+            (int, float),
+        )
     ):
         raise TypeError(
             "modified_at must be numerical."
@@ -517,7 +613,9 @@ def upsert_source_file(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         connection.execute(
             """
             INSERT INTO source_files (
@@ -563,7 +661,9 @@ def delete_documents_by_source(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         cursor = connection.execute(
             """
             DELETE FROM documents
@@ -601,7 +701,9 @@ def delete_source_file(
         database_path
     )
 
-    with database_connection(database_path) as connection:
+    with database_connection(
+        database_path
+    ) as connection:
         cursor = connection.execute(
             """
             DELETE FROM source_files
@@ -612,4 +714,7 @@ def delete_source_file(
             ),
         )
 
-        return cursor.rowcount > 0
+        return (
+            cursor.rowcount
+            > 0
+        )

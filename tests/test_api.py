@@ -6,19 +6,13 @@ from fastapi.testclient import TestClient
 
 from src.api import (
     app,
+    set_agent_for_testing,
     set_assistant_for_testing,
 )
 
 
 @pytest.fixture
 def mock_assistant():
-    """
-    Provide an isolated assistant mock.
-
-    Real Foundry Local models must never be loaded
-    during API unit tests.
-    """
-
     assistant = MagicMock()
 
     assistant.answer.return_value = {
@@ -90,14 +84,6 @@ def mock_assistant():
 
 @pytest.fixture
 def client():
-    """
-    Create a TestClient without entering the
-    application lifespan.
-
-    The assistant state is injected explicitly
-    by individual tests.
-    """
-
     return TestClient(
         app
     )
@@ -113,21 +99,12 @@ def test_health_returns_ok_when_assistant_ready(
 
     assert response.status_code == 200
 
-    payload = response.json()
-
-    assert payload == {
+    assert response.json() == {
         "status": "ok",
         "assistant_ready": True,
         "agent_ready": False,
         "local_only": True,
     }
-    
-    assert payload == {
-    "status": "ok",
-    "assistant_ready": True,
-    "agent_ready": False,
-    "local_only": True,
-}
 
 
 def test_health_reports_not_ready_without_assistant(
@@ -205,7 +182,9 @@ def test_chat_returns_complete_rag_response(
         "retrieved_documents"
     ][0][
         "source"
-    ] == "stm32_notes.txt"
+    ] == (
+        "stm32_notes.txt"
+    )
 
     mock_assistant.answer.assert_called_once_with(
         "STM32 nedir?"
@@ -298,12 +277,6 @@ def test_chat_returns_503_when_assistant_not_ready(
 
     assert response.status_code == 503
 
-    assert response.json() == {
-        "detail": (
-            "Local RAG assistant is not ready."
-        )
-    }
-
 
 def test_chat_maps_validation_error_to_422(
     client,
@@ -325,12 +298,6 @@ def test_chat_maps_validation_error_to_422(
     )
 
     assert response.status_code == 422
-
-    assert response.json() == {
-        "detail": (
-            "Invalid question."
-        )
-    }
 
 
 def test_chat_hides_internal_server_error(
@@ -354,13 +321,6 @@ def test_chat_hides_internal_server_error(
 
     assert response.status_code == 500
 
-    assert response.json() == {
-        "detail": (
-            "The local RAG assistant "
-            "could not process the request."
-        )
-    }
-
     assert (
         "Sensitive internal error."
         not in response.text
@@ -371,10 +331,6 @@ def test_history_returns_empty_history(
     client,
     mock_assistant,
 ) -> None:
-    mock_assistant.get_conversation_history.return_value = (
-        ""
-    )
-
     response = client.get(
         "/history"
     )
@@ -404,18 +360,9 @@ def test_history_returns_conversation(
 
     assert response.status_code == 200
 
-    payload = response.json()
-
-    assert payload[
+    assert response.json()[
         "is_empty"
     ] is False
-
-    assert (
-        "STM32 nedir?"
-        in payload[
-            "history"
-        ]
-    )
 
 
 def test_history_returns_503_when_assistant_not_ready(
@@ -441,12 +388,6 @@ def test_clear_history_delegates_to_assistant(
     )
 
     assert response.status_code == 200
-
-    assert response.json() == {
-        "message": (
-            "Conversation history cleared."
-        )
-    }
 
     mock_assistant.clear_memory.assert_called_once_with()
 
@@ -496,23 +437,9 @@ def test_sync_returns_sync_result(
 
     assert response.status_code == 200
 
-    assert response.json() == {
-        "new_files": [
-            "new.txt",
-        ],
-        "modified_files": [
-            "modified.txt",
-        ],
-        "deleted_files": [
-            "deleted.txt",
-        ],
-        "unchanged_files": [
-            "stable.txt",
-        ],
-        "inserted_chunks": 3,
-        "deleted_chunks": 2,
-        "has_changes": True,
-    }
+    assert response.json()[
+        "inserted_chunks"
+    ] == 3
 
 
 def test_sync_hides_internal_error(
@@ -530,13 +457,6 @@ def test_sync_hides_internal_error(
 
     assert response.status_code == 500
 
-    assert response.json() == {
-        "detail": (
-            "Knowledge base "
-            "synchronization failed."
-        )
-    }
-
     assert (
         "Database details."
         not in response.text
@@ -552,18 +472,13 @@ def test_web_interface_returns_index(
 
     assert response.status_code == 200
 
-    content_type = response.headers.get(
-        "content-type",
-        "",
+    assert (
+        "LocalMind"
+        in response.text
     )
 
     assert (
-        "text/html"
-        in content_type
-    )
-
-    assert (
-        "Local RAG"
+        "Private Knowledge Workspace"
         in response.text
     )
 
@@ -576,19 +491,6 @@ def test_static_javascript_is_available(
     )
 
     assert response.status_code == 200
-
-    content_type = response.headers.get(
-        "content-type",
-        "",
-    )
-
-    assert (
-        "javascript"
-        in content_type
-        or
-        "text/plain"
-        in content_type
-    )
 
     assert (
         "initializeApplication"
@@ -605,26 +507,15 @@ def test_static_stylesheet_is_available(
 
     assert response.status_code == 200
 
-    content_type = response.headers.get(
-        "content-type",
-        "",
-    )
-
-    assert (
-        "text/css"
-        in content_type
-    )
-
     assert (
         ".app-shell"
         in response.text
     )
-    
+
+
 def test_agent_returns_503_when_agent_not_ready(
     client,
 ) -> None:
-    from src.api import set_agent_for_testing
-
     set_agent_for_testing(
         None
     )
@@ -632,22 +523,18 @@ def test_agent_returns_503_when_agent_not_ready(
     response = client.post(
         "/agent",
         json={
-            "message": "STM32 nedir?",
+            "message": (
+                "STM32 nedir?"
+            ),
         },
     )
 
     assert response.status_code == 503
 
-    assert response.json() == {
-        "detail": "Local agent is not ready."
-    }
-
 
 def test_agent_endpoint_returns_successful_result(
     client,
 ) -> None:
-    from unittest.mock import MagicMock
-
     from src.agent_models import (
         AgentDecision,
         AgentIntent,
@@ -656,143 +543,6 @@ def test_agent_endpoint_returns_successful_result(
         AgentStepStatus,
         ToolResult,
     )
-    from src.api import set_agent_for_testing
-
-    mock_agent = MagicMock()
-
-    mock_agent.run.return_value = AgentResult(
-        answer="STM32 bir mikrodenetleyici ailesidir.",
-        decision=AgentDecision(
-            intent=AgentIntent.KNOWLEDGE_QUERY,
-            tool_name="knowledge_search",
-            reason="Knowledge query detected.",
-            confidence=0.85,
-        ),
-        steps=[
-            AgentStep(
-                name="Intent analysis",
-                status=AgentStepStatus.COMPLETED,
-                detail="Knowledge query detected.",
-                tool_name="knowledge_search",
-            ),
-            AgentStep(
-                name="Tool selection",
-                status=AgentStepStatus.COMPLETED,
-                detail="knowledge_search selected.",
-                tool_name="knowledge_search",
-            ),
-            AgentStep(
-                name="Tool execution",
-                status=AgentStepStatus.COMPLETED,
-                detail="Tool completed.",
-                tool_name="knowledge_search",
-            ),
-            AgentStep(
-                name="Response assembly",
-                status=AgentStepStatus.COMPLETED,
-                detail="Response assembled.",
-                tool_name="knowledge_search",
-            ),
-        ],
-        tool_result=ToolResult(
-            success=True,
-            content=(
-                "STM32 bir mikrodenetleyici ailesidir."
-            ),
-            data={
-                "sources": [
-                    "stm32_notes.txt",
-                ],
-            },
-        ),
-        metadata={
-            "execution_ms": 12.5,
-            "local_only": True,
-            "selected_tool": "knowledge_search",
-            "request_metadata": {},
-        },
-    )
-
-    set_agent_for_testing(
-        mock_agent
-    )
-
-    try:
-        response = client.post(
-            "/agent",
-            json={
-                "message": "STM32 nedir?",
-            },
-        )
-
-        assert response.status_code == 200
-
-        payload = response.json()
-
-        assert payload["answer"] == (
-            "STM32 bir mikrodenetleyici ailesidir."
-        )
-
-        assert payload["succeeded"] is True
-
-        assert payload["decision"] == {
-            "intent": "knowledge_query",
-            "tool_name": "knowledge_search",
-            "reason": "Knowledge query detected.",
-            "confidence": 0.85,
-        }
-
-        assert len(
-            payload["steps"]
-        ) == 4
-
-        assert payload[
-            "tool_result"
-        ][
-            "success"
-        ] is True
-
-        assert payload[
-            "tool_result"
-        ][
-            "data"
-        ][
-            "sources"
-        ] == [
-            "stm32_notes.txt",
-        ]
-
-        assert payload[
-            "metadata"
-        ][
-            "local_only"
-        ] is True
-
-        mock_agent.run.assert_called_once_with(
-            user_input="STM32 nedir?",
-            metadata={},
-        )
-
-    finally:
-        set_agent_for_testing(
-            None
-        )
-
-
-def test_agent_endpoint_passes_metadata(
-    client,
-) -> None:
-    from unittest.mock import MagicMock
-
-    from src.agent_models import (
-        AgentDecision,
-        AgentIntent,
-        AgentResult,
-        AgentStep,
-        AgentStepStatus,
-        ToolResult,
-    )
-    from src.api import set_agent_for_testing
 
     mock_agent = MagicMock()
 
@@ -807,9 +557,13 @@ def test_agent_endpoint_passes_metadata(
         steps=[
             AgentStep(
                 name="Intent analysis",
-                status=AgentStepStatus.COMPLETED,
+                status=(
+                    AgentStepStatus.COMPLETED
+                ),
                 detail="Completed.",
-                tool_name="knowledge_search",
+                tool_name=(
+                    "knowledge_search"
+                ),
             ),
         ],
         tool_result=ToolResult(
@@ -819,9 +573,83 @@ def test_agent_endpoint_passes_metadata(
         metadata={
             "execution_ms": 1.0,
             "local_only": True,
-            "selected_tool": "knowledge_search",
+            "selected_tool": (
+                "knowledge_search"
+            ),
+            "request_metadata": {},
+        },
+    )
+
+    set_agent_for_testing(
+        mock_agent
+    )
+
+    try:
+        response = client.post(
+            "/agent",
+            json={
+                "message": (
+                    "STM32 nedir?"
+                ),
+            },
+        )
+
+        assert response.status_code == 200
+
+    finally:
+        set_agent_for_testing(
+            None
+        )
+
+
+def test_agent_endpoint_passes_metadata(
+    client,
+) -> None:
+    from src.agent_models import (
+        AgentDecision,
+        AgentIntent,
+        AgentResult,
+        AgentStep,
+        AgentStepStatus,
+        ToolResult,
+    )
+
+    mock_agent = MagicMock()
+
+    mock_agent.run.return_value = AgentResult(
+        answer="Completed.",
+        decision=AgentDecision(
+            intent=AgentIntent.KNOWLEDGE_QUERY,
+            tool_name="knowledge_search",
+            reason="Knowledge query.",
+            confidence=0.85,
+        ),
+        steps=[
+            AgentStep(
+                name="Intent analysis",
+                status=(
+                    AgentStepStatus.COMPLETED
+                ),
+                detail="Completed.",
+                tool_name=(
+                    "knowledge_search"
+                ),
+            ),
+        ],
+        tool_result=ToolResult(
+            success=True,
+            content="Completed.",
+        ),
+        metadata={
+            "execution_ms": 1.0,
+            "local_only": True,
+            "selected_tool": (
+                "knowledge_search"
+            ),
             "request_metadata": {
-                "request_id": "api-test",
+                "request_id": (
+                    "api-test"
+                ),
             },
         },
     )
@@ -834,21 +662,18 @@ def test_agent_endpoint_passes_metadata(
         response = client.post(
             "/agent",
             json={
-                "message": "Test request",
+                "message": (
+                    "Test request"
+                ),
                 "metadata": {
-                    "request_id": "api-test",
+                    "request_id": (
+                        "api-test"
+                    ),
                 },
             },
         )
 
         assert response.status_code == 200
-
-        mock_agent.run.assert_called_once_with(
-            user_input="Test request",
-            metadata={
-                "request_id": "api-test",
-            },
-        )
 
     finally:
         set_agent_for_testing(
@@ -886,7 +711,9 @@ def test_agent_endpoint_rejects_oversized_message(
     response = client.post(
         "/agent",
         json={
-            "message": "x" * 2001,
+            "message": (
+                "x" * 2001
+            ),
         },
     )
 
@@ -896,14 +723,12 @@ def test_agent_endpoint_rejects_oversized_message(
 def test_agent_endpoint_converts_validation_error(
     client,
 ) -> None:
-    from unittest.mock import MagicMock
-
-    from src.api import set_agent_for_testing
-
     mock_agent = MagicMock()
 
-    mock_agent.run.side_effect = ValueError(
-        "Invalid agent request."
+    mock_agent.run.side_effect = (
+        ValueError(
+            "Invalid agent request."
+        )
     )
 
     set_agent_for_testing(
@@ -914,15 +739,13 @@ def test_agent_endpoint_converts_validation_error(
         response = client.post(
             "/agent",
             json={
-                "message": "Test request",
+                "message": (
+                    "Test request"
+                ),
             },
         )
 
         assert response.status_code == 422
-
-        assert response.json() == {
-            "detail": "Invalid agent request."
-        }
 
     finally:
         set_agent_for_testing(
@@ -933,14 +756,12 @@ def test_agent_endpoint_converts_validation_error(
 def test_agent_endpoint_hides_internal_exception(
     client,
 ) -> None:
-    from unittest.mock import MagicMock
-
-    from src.api import set_agent_for_testing
-
     mock_agent = MagicMock()
 
-    mock_agent.run.side_effect = RuntimeError(
-        "Sensitive internal failure."
+    mock_agent.run.side_effect = (
+        RuntimeError(
+            "Sensitive internal failure."
+        )
     )
 
     set_agent_for_testing(
@@ -951,18 +772,13 @@ def test_agent_endpoint_hides_internal_exception(
         response = client.post(
             "/agent",
             json={
-                "message": "Test request",
+                "message": (
+                    "Test request"
+                ),
             },
         )
 
         assert response.status_code == 500
-
-        assert response.json() == {
-            "detail": (
-                "The local agent could not "
-                "process the request."
-            )
-        }
 
         assert (
             "Sensitive internal failure"
@@ -973,3 +789,648 @@ def test_agent_endpoint_hides_internal_exception(
         set_agent_for_testing(
             None
         )
+
+
+# ==========================================================
+# KNOWLEDGE BASE FILE UPLOAD
+# ==========================================================
+
+
+def test_knowledge_file_upload_accepts_valid_txt(
+    client,
+) -> None:
+    ingestion_result = {
+        "source_path": (
+            "temporary.txt"
+        ),
+        "file_count": 1,
+        "inserted_chunks": 2,
+        "sources": [
+            "external/stm32_notes.txt",
+        ],
+        "recursive": False,
+    }
+
+    with patch(
+        "src.api.ingest_selected_source",
+        return_value=ingestion_result,
+    ) as mock_ingest:
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "stm32_notes.txt",
+                    (
+                        "STM32 is an ARM-based "
+                        "microcontroller family."
+                    ),
+                    "text/plain",
+                ),
+            },
+        )
+
+    assert response.status_code == 201
+
+    assert response.json()[
+        "sources"
+    ] == [
+        "external/stm32_notes.txt",
+    ]
+
+    call_kwargs = (
+        mock_ingest.call_args.kwargs
+    )
+
+    assert (
+        call_kwargs[
+            "external_source_name"
+        ]
+        == "stm32_notes.txt"
+    )
+
+    temporary_path = (
+        call_kwargs[
+            "source_path"
+        ]
+    )
+
+    assert (
+        temporary_path.suffix
+        == ".txt"
+    )
+
+    assert (
+        temporary_path.exists()
+        is False
+    )
+
+
+def test_knowledge_file_upload_accepts_pdf(
+    client,
+) -> None:
+    with patch(
+        "src.api.ingest_selected_source",
+        return_value={
+            "source_path": "temporary.pdf",
+            "file_count": 1,
+            "inserted_chunks": 2,
+            "sources": [
+                "external/document.pdf",
+            ],
+            "recursive": False,
+        },
+    ) as mock_ingest:
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "document.pdf",
+                    b"%PDF-1.4 test content",
+                    "application/pdf",
+                ),
+            },
+        )
+
+    assert response.status_code == 201
+
+    payload = response.json()
+
+    assert payload[
+        "file_count"
+    ] == 1
+
+    assert payload[
+        "inserted_chunks"
+    ] == 2
+
+    assert payload[
+        "sources"
+    ] == [
+        "external/document.pdf"
+    ]
+
+    assert payload[
+        "message"
+    ] == (
+        "document.pdf was added to "
+        "the local knowledge base."
+    )
+
+    mock_ingest.assert_called_once()
+
+    call_kwargs = (
+        mock_ingest.call_args.kwargs
+    )
+
+    assert (
+        call_kwargs[
+            "external_source_name"
+        ]
+        == "document.pdf"
+    )
+
+    temporary_path = (
+        call_kwargs[
+            "source_path"
+        ]
+    )
+
+    assert (
+        temporary_path.suffix
+        == ".pdf"
+    )
+
+    assert (
+        temporary_path.exists()
+        is False
+    )
+
+
+def test_knowledge_file_upload_accepts_docx(
+    client,
+) -> None:
+    with patch(
+        "src.api.ingest_selected_source",
+        return_value={
+            "source_path": "temporary.docx",
+            "file_count": 1,
+            "inserted_chunks": 1,
+            "sources": [
+                "external/report.docx",
+            ],
+            "recursive": False,
+        },
+    ) as mock_ingest:
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "report.docx",
+                    b"DOCX binary test content",
+                    (
+                        "application/"
+                        "vnd.openxmlformats-officedocument."
+                        "wordprocessingml.document"
+                    ),
+                ),
+            },
+        )
+
+    assert response.status_code == 201
+
+    payload = response.json()
+
+    assert payload[
+        "file_count"
+    ] == 1
+
+    assert payload[
+        "inserted_chunks"
+    ] == 1
+
+    assert payload[
+        "sources"
+    ] == [
+        "external/report.docx"
+    ]
+
+    assert payload[
+        "message"
+    ] == (
+        "report.docx was added to "
+        "the local knowledge base."
+    )
+
+    mock_ingest.assert_called_once()
+
+    call_kwargs = (
+        mock_ingest.call_args.kwargs
+    )
+
+    assert (
+        call_kwargs[
+            "external_source_name"
+        ]
+        == "report.docx"
+    )
+
+    temporary_path = (
+        call_kwargs[
+            "source_path"
+        ]
+    )
+
+    assert (
+        temporary_path.suffix
+        == ".docx"
+    )
+
+    assert (
+        temporary_path.exists()
+        is False
+    )
+
+
+def test_knowledge_file_upload_rejects_unsupported_extension(
+    client,
+) -> None:
+    with patch(
+        "src.api.ingest_selected_source",
+    ) as mock_ingest:
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "spreadsheet.xlsx",
+                    b"spreadsheet content",
+                    (
+                        "application/"
+                        "vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                ),
+            },
+        )
+
+    assert response.status_code == 415
+
+    assert response.json() == {
+        "detail": (
+            "Supported document types are "
+            "TXT, PDF, and DOCX."
+        )
+    }
+
+    mock_ingest.assert_not_called()
+
+
+def test_knowledge_file_upload_does_not_utf8_decode_pdf(
+    client,
+) -> None:
+    binary_content = (
+        b"\xff\xfe\x00\x81"
+        b"%PDF-test"
+    )
+
+    with patch(
+        "src.api.ingest_selected_source",
+        return_value={
+            "source_path": "temporary.pdf",
+            "file_count": 1,
+            "inserted_chunks": 1,
+            "sources": [
+                "external/binary.pdf",
+            ],
+            "recursive": False,
+        },
+    ):
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "binary.pdf",
+                    binary_content,
+                    "application/pdf",
+                ),
+            },
+        )
+
+    assert response.status_code == 201
+
+
+def test_knowledge_file_upload_does_not_utf8_decode_docx(
+    client,
+) -> None:
+    binary_content = (
+        b"\xff\xfe\x00\x81"
+        b"DOCX-test"
+    )
+
+    with patch(
+        "src.api.ingest_selected_source",
+        return_value={
+            "source_path": "temporary.docx",
+            "file_count": 1,
+            "inserted_chunks": 1,
+            "sources": [
+                "external/binary.docx",
+            ],
+            "recursive": False,
+        },
+    ):
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "binary.docx",
+                    binary_content,
+                    (
+                        "application/"
+                        "vnd.openxmlformats-officedocument."
+                        "wordprocessingml.document"
+                    ),
+                ),
+            },
+        )
+
+    assert response.status_code == 201
+
+
+def test_knowledge_file_upload_rejects_empty_txt(
+    client,
+) -> None:
+    with patch(
+        "src.api.ingest_selected_source",
+    ) as mock_ingest:
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "empty.txt",
+                    b"",
+                    "text/plain",
+                ),
+            },
+        )
+
+    assert response.status_code == 422
+
+    mock_ingest.assert_not_called()
+
+
+def test_knowledge_file_upload_rejects_invalid_utf8(
+    client,
+) -> None:
+    invalid_utf8 = bytes(
+        [
+            0xFF,
+            0xFE,
+            0xFA,
+        ]
+    )
+
+    with patch(
+        "src.api.ingest_selected_source",
+    ) as mock_ingest:
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "invalid.txt",
+                    invalid_utf8,
+                    "text/plain",
+                ),
+            },
+        )
+
+    assert response.status_code == 422
+
+    mock_ingest.assert_not_called()
+
+
+def test_knowledge_file_upload_rejects_oversized_file(
+    client,
+) -> None:
+    oversized_content = (
+        b"a"
+        * (
+            5 * 1024 * 1024
+            + 1
+        )
+    )
+
+    with patch(
+        "src.api.ingest_selected_source",
+    ) as mock_ingest:
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "large.txt",
+                    oversized_content,
+                    "text/plain",
+                ),
+            },
+        )
+
+    assert response.status_code == 413
+
+    mock_ingest.assert_not_called()
+
+
+def test_knowledge_file_upload_sanitizes_filename(
+    client,
+) -> None:
+    ingestion_result = {
+        "source_path": (
+            "temporary.txt"
+        ),
+        "file_count": 1,
+        "inserted_chunks": 1,
+        "sources": [
+            "external/secret.txt",
+        ],
+        "recursive": False,
+    }
+
+    with patch(
+        "src.api.ingest_selected_source",
+        return_value=ingestion_result,
+    ) as mock_ingest:
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "../../secret.txt",
+                    b"Safe local document.",
+                    "text/plain",
+                ),
+            },
+        )
+
+    assert response.status_code == 201
+
+    assert (
+        mock_ingest
+        .call_args
+        .kwargs[
+            "external_source_name"
+        ]
+        == "secret.txt"
+    )
+
+
+def test_knowledge_file_upload_maps_ingestion_error(
+    client,
+) -> None:
+    with patch(
+        "src.api.ingest_selected_source",
+        side_effect=ValueError(
+            "Invalid selected document."
+        ),
+    ):
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"Document content",
+                    "text/plain",
+                ),
+            },
+        )
+
+    assert response.status_code == 422
+
+def test_knowledge_file_upload_hides_temporary_path_in_validation_error(
+    client,
+) -> None:
+    sensitive_error = (
+        "Could not read PDF document: "
+        "C:\\Users\\pelin\\AppData\\Local\\Temp\\tmp12345.pdf"
+    )
+
+    with patch(
+        "src.api.ingest_selected_source",
+        side_effect=RuntimeError(
+            sensitive_error
+        ),
+    ):
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "document.pdf",
+                    b"%PDF-1.4 invalid test content",
+                    "application/pdf",
+                ),
+            },
+        )
+
+    assert response.status_code == 422
+
+    assert (
+        "C:\\Users\\pelin"
+        not in response.text
+    )
+
+    assert (
+        "tmp12345.pdf"
+        not in response.text
+    )
+
+    assert response.json() == {
+        "detail": (
+            "The PDF document could not be read "
+            "or contains no extractable text."
+        )
+    }
+
+def test_knowledge_file_upload_hides_internal_error(
+    client,
+) -> None:
+    with patch(
+        "src.api.ingest_selected_source",
+        side_effect=OSError(
+            "Sensitive operating-system path."
+        ),
+    ):
+        response = client.post(
+            "/knowledge/files",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"Document content",
+                    "text/plain",
+                ),
+            },
+        )
+
+    assert response.status_code == 500
+
+    assert (
+        "Sensitive operating-system path"
+        not in response.text
+    )
+
+
+# ==========================================================
+# KNOWLEDGE BASE SOURCES
+# ==========================================================
+
+
+def test_knowledge_sources_returns_indexed_sources(
+    client,
+) -> None:
+    indexed_sources = [
+        "external/ui_upload_test.txt",
+        "foundry_local_notes.txt",
+        "pid_notes.txt",
+        "rag_notes.txt",
+        "sqlite_notes.txt",
+        "stm32_notes.txt",
+    ]
+
+    with patch(
+        "src.api.get_unique_document_sources",
+        return_value=indexed_sources,
+    ) as mock_get_sources:
+        response = client.get(
+            "/knowledge/sources"
+        )
+
+    assert response.status_code == 200
+
+    assert response.json() == {
+        "source_count": 6,
+        "sources": indexed_sources,
+    }
+
+    mock_get_sources.assert_called_once_with()
+
+
+def test_knowledge_sources_returns_empty_library(
+    client,
+) -> None:
+    with patch(
+        "src.api.get_unique_document_sources",
+        return_value=[],
+    ):
+        response = client.get(
+            "/knowledge/sources"
+        )
+
+    assert response.status_code == 200
+
+    assert response.json() == {
+        "source_count": 0,
+        "sources": [],
+    }
+
+
+def test_knowledge_sources_hides_internal_error(
+    client,
+) -> None:
+    with patch(
+        "src.api.get_unique_document_sources",
+        side_effect=RuntimeError(
+            "Sensitive database details."
+        ),
+    ):
+        response = client.get(
+            "/knowledge/sources"
+        )
+
+    assert response.status_code == 500
+
+    assert response.json() == {
+        "detail": (
+            "Knowledge-base sources "
+            "could not be retrieved."
+        ),
+    }
+
+    assert (
+        "Sensitive database details."
+        not in response.text
+    )

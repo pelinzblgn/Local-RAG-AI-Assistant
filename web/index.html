@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -9,7 +9,12 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Local RAG AI Workspace</title>
+    <meta
+        name="description"
+        content="LocalMind is a private workspace for learning, reviewing, and working with your own documents using local AI."
+    >
+
+    <title>LocalMind — Private Knowledge Workspace</title>
 
     <link
         rel="stylesheet"
@@ -27,32 +32,24 @@
 
         <aside class="sidebar">
 
+            <!-- =================================================
+                 BRAND
+                 ================================================= -->
+
             <div class="brand">
 
                 <div class="brand-mark">
-                    LR
+                    LM
                 </div>
 
-                <div>
-                    <h1>Local RAG</h1>
-                    <p>AI Workspace</p>
-                </div>
+                <div class="brand-copy">
 
-            </div>
-
-
-            <div class="local-status">
-
-                <span class="status-dot"></span>
-
-                <div>
-
-                    <strong>
-                        LOCAL ONLY
-                    </strong>
+                    <h1>
+                        LocalMind
+                    </h1>
 
                     <p>
-                        Foundry Local runtime
+                        Private Knowledge Workspace
                     </p>
 
                 </div>
@@ -61,16 +58,47 @@
 
 
             <!-- =================================================
-                 KNOWLEDGE BASE
+                 PRIVACY STATUS
                  ================================================= -->
 
-            <section class="sidebar-card">
+            <div class="local-status">
+
+                <span class="status-dot"></span>
+
+                <div>
+
+                    <strong>
+                        LOCAL & PRIVATE
+                    </strong>
+
+                    <p>
+                        Your documents stay on this device
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 LIBRARY
+                 ================================================= -->
+
+            <section class="sidebar-card knowledge-card">
 
                 <div class="section-heading">
 
-                    <span>
-                        Knowledge Base
-                    </span>
+                    <div class="section-heading-copy">
+
+                        <span>
+                            Library
+                        </span>
+
+                        <small>
+                            Your documents
+                        </small>
+
+                    </div>
 
                     <span
                         id="source-count"
@@ -87,17 +115,104 @@
                     class="source-list"
                 >
                     <p class="muted">
-                        Kaynaklar yükleniyor...
+                        Loading your library...
                     </p>
+                </div>
+
+
+                <!-- =============================================
+                     DOCUMENT IMPORT
+                     ============================================= -->
+
+                <div class="knowledge-import">
+
+                    <div class="knowledge-import-heading">
+
+                        <div>
+
+                            <strong>
+                                Add a document
+                            </strong>
+
+                            <small>
+                                Add material to your workspace
+                            </small>
+
+                        </div>
+
+                        <span>
+                            TXT · PDF · DOCX
+                        </span>
+
+                    </div>
+
+
+                    <p class="knowledge-import-description">
+                        Choose a TXT, PDF, or DOCX document from your computer.
+                        Only the file you select will be added.
+                    </p>
+
+
+                    <input
+                        id="knowledge-file-input"
+                        class="knowledge-file-input"
+                        type="file"
+                        accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        hidden
+                    >
+
+
+                    <button
+                        id="select-knowledge-file-button"
+                        class="secondary-button document-select-button"
+                        type="button"
+                    >
+                        Choose Document
+                    </button>
+
+
+                    <div
+                        id="selected-file-info"
+                        class="selected-file-info hidden"
+                    >
+
+                        <span class="selected-file-label">
+                            Selected document
+                        </span>
+
+                        <strong id="selected-file-name">
+                            -
+                        </strong>
+
+                    </div>
+
+
+                    <button
+                        id="upload-knowledge-file-button"
+                        class="secondary-button document-upload-button hidden"
+                        type="button"
+                        disabled
+                    >
+                        Add to Library
+                    </button>
+
+
+                    <p
+                        id="knowledge-upload-status"
+                        class="knowledge-upload-status"
+                        role="status"
+                        aria-live="polite"
+                    ></p>
+
                 </div>
 
 
                 <button
                     id="sync-button"
-                    class="secondary-button"
+                    class="secondary-button sync-button"
                     type="button"
                 >
-                    Sync Knowledge Base
+                    Update Library
                 </button>
 
             </section>
@@ -107,13 +222,21 @@
                  SESSION
                  ================================================= -->
 
-            <section class="sidebar-card">
+            <section class="sidebar-card session-card">
 
                 <div class="section-heading">
 
-                    <span>
-                        Session
-                    </span>
+                    <div class="section-heading-copy">
+
+                        <span>
+                            Session
+                        </span>
+
+                        <small>
+                            Current conversation
+                        </small>
+
+                    </div>
 
                 </div>
 
@@ -123,7 +246,7 @@
                     class="secondary-button danger"
                     type="button"
                 >
-                    Clear Conversation
+                    Start New Session
                 </button>
 
             </section>
@@ -135,17 +258,20 @@
 
             <div class="sidebar-footer">
 
-                <span>
-                    Microsoft Foundry Local
-                </span>
+                <div class="sidebar-footer-line">
+                    <span class="footer-dot"></span>
+                    <span>Microsoft Foundry Local</span>
+                </div>
 
-                <span>
-                    Phi-4 Mini
-                </span>
+                <div class="sidebar-footer-line">
+                    <span class="footer-dot"></span>
+                    <span>Phi-4 Mini</span>
+                </div>
 
-                <span>
-                    Privacy-first local AI
-                </span>
+                <div class="sidebar-footer-line">
+                    <span class="footer-dot"></span>
+                    <span>Runs on your device</span>
+                </div>
 
             </div>
 
@@ -164,19 +290,19 @@
 
             <header class="topbar">
 
-                <div>
+                <div class="topbar-copy">
 
                     <p class="eyebrow">
-                        PRIVATE LOCAL AI WORKSPACE
+                        YOUR PRIVATE WORKSPACE
                     </p>
 
                     <h2 id="workspace-title">
-                        Ask your local knowledge base
+                        What are you working on today?
                     </h2>
 
                     <p id="workspace-description">
-                        Answers are grounded only in your
-                        indexed local documents.
+                        Ask questions, review concepts, and explore
+                        information from your own documents privately.
                     </p>
 
                 </div>
@@ -196,7 +322,7 @@
                         </strong>
 
                         <small id="health-detail">
-                            Local runtime
+                            LocalMind
                         </small>
 
                     </div>
@@ -215,7 +341,7 @@
                 <div
                     class="mode-switch"
                     role="group"
-                    aria-label="Workspace mode"
+                    aria-label="LocalMind workspace mode"
                 >
 
                     <button
@@ -226,17 +352,17 @@
                     >
 
                         <span class="mode-icon">
-                            RAG
+                            CH
                         </span>
 
                         <span class="mode-button-copy">
 
                             <strong>
-                                Assistant
+                                Chat
                             </strong>
 
                             <small>
-                                Direct grounded retrieval
+                                Learn from your documents
                             </small>
 
                         </span>
@@ -262,7 +388,7 @@
                             </strong>
 
                             <small>
-                                Intent · tools · execution
+                                Work with local tools
                             </small>
 
                         </span>
@@ -282,11 +408,11 @@
                     <div>
 
                         <strong id="mode-status-title">
-                            Assistant Mode
+                            Study Mode
                         </strong>
 
                         <small id="mode-status-detail">
-                            Direct RAG pipeline
+                            Your document library
                         </small>
 
                     </div>
@@ -311,20 +437,46 @@
                 >
 
                     <div class="welcome-icon">
-                        AI
+                        LM
                     </div>
 
-                    <div>
+
+                    <div class="welcome-content">
+
+                        <p class="welcome-label">
+                            LOCALMIND
+                        </p>
 
                         <h3 id="welcome-title">
-                            Local RAG AI Assistant
+                            Turn your documents into a workspace you can talk to
                         </h3>
 
                         <p id="welcome-description">
-                            Belgeleriniz hakkında soru sorun.
-                            Sistem yalnızca yerel knowledge base
-                            içeriğine dayanarak cevap verir.
+                            Add study notes, project files, or technical
+                            documentation and explore them naturally.
+                            LocalMind keeps your documents on your device
+                            while giving answers based on your own sources.
                         </p>
+
+                        <div class="welcome-features">
+
+                            <span>
+                                Study
+                            </span>
+
+                            <span>
+                                Review
+                            </span>
+
+                            <span>
+                                Explore
+                            </span>
+
+                            <span>
+                                Private
+                            </span>
+
+                        </div>
 
                     </div>
 
@@ -348,10 +500,9 @@
                         id="question-input"
                         rows="1"
                         maxlength="2000"
-                        placeholder="Yerel belgeleriniz hakkında bir soru sorun..."
-                        aria-label="Question"
+                        placeholder="Ask something from your documents..."
+                        aria-label="Ask LocalMind"
                     ></textarea>
-
 
                     <button
                         id="send-button"
@@ -366,9 +517,8 @@
                 <div class="composer-meta">
 
                     <span id="composer-mode-label">
-                        Local inference · Direct RAG
+                        Private · On-device
                     </span>
-
 
                     <div class="composer-actions">
 
@@ -380,13 +530,12 @@
                             Agent Trace
                         </button>
 
-
                         <button
                             id="open-diagnostics"
                             class="text-button"
                             type="button"
                         >
-                            Retrieval Diagnostics
+                            Answer Details
                         </button>
 
                     </div>
@@ -414,15 +563,14 @@
             <div>
 
                 <p class="eyebrow">
-                    AGENT EXECUTION TRACE
+                    LOCAL AGENT
                 </p>
 
                 <h3>
-                    Local Agent
+                    Agent Activity
                 </h3>
 
             </div>
-
 
             <button
                 id="close-agent-panel"
@@ -435,10 +583,6 @@
 
         </div>
 
-
-        <!-- =================================================
-             AGENT METRICS
-             ================================================= -->
 
         <div class="metrics-grid">
 
@@ -458,7 +602,7 @@
             <div class="metric-card">
 
                 <span>
-                    Decision Confidence
+                    Confidence
                 </span>
 
                 <strong id="agent-confidence">
@@ -471,7 +615,7 @@
             <div class="metric-card">
 
                 <span>
-                    Selected Tool
+                    Tool
                 </span>
 
                 <strong id="agent-tool">
@@ -484,7 +628,7 @@
             <div class="metric-card">
 
                 <span>
-                    Execution
+                    Time
                 </span>
 
                 <strong id="agent-execution">
@@ -496,16 +640,11 @@
         </div>
 
 
-        <!-- =================================================
-             AGENT DECISION
-             ================================================= -->
-
         <div class="diagnostics-section">
 
             <h4>
                 Decision
             </h4>
-
 
             <div class="diagnostic-block">
 
@@ -514,7 +653,7 @@
                 </span>
 
                 <p id="agent-reason">
-                    No agent execution yet.
+                    No agent action yet.
                 </p>
 
             </div>
@@ -522,16 +661,11 @@
         </div>
 
 
-        <!-- =================================================
-             AGENT EXECUTION STEPS
-             ================================================= -->
-
         <div class="diagnostics-section">
 
             <h4>
-                Execution Steps
+                Steps
             </h4>
-
 
             <div
                 id="agent-steps"
@@ -539,7 +673,7 @@
             >
 
                 <p class="muted">
-                    Henüz agent çalıştırılmadı.
+                    No agent action yet.
                 </p>
 
             </div>
@@ -547,16 +681,11 @@
         </div>
 
 
-        <!-- =================================================
-             AGENT EXECUTION ENVIRONMENT
-             ================================================= -->
-
         <div class="diagnostics-section">
 
             <h4>
-                Execution Environment
+                Environment
             </h4>
-
 
             <div class="diagnostic-row">
 
@@ -586,16 +715,11 @@
         </div>
 
 
-        <!-- =================================================
-             AGENT TOOL RESULT
-             ================================================= -->
-
         <div class="diagnostics-section">
 
             <h4>
-                Tool Result
+                Result
             </h4>
-
 
             <div class="diagnostic-row">
 
@@ -628,7 +752,7 @@
 
 
     <!-- =====================================================
-         RETRIEVAL DIAGNOSTICS
+         ANSWER DETAILS
          ===================================================== -->
 
     <aside
@@ -641,31 +765,26 @@
             <div>
 
                 <p class="eyebrow">
-                    RETRIEVAL DIAGNOSTICS
+                    ANSWER DETAILS
                 </p>
 
                 <h3>
-                    Explainable RAG
+                    How this answer was formed
                 </h3>
 
             </div>
-
 
             <button
                 id="close-diagnostics"
                 class="icon-button"
                 type="button"
-                aria-label="Close diagnostics"
+                aria-label="Close answer details"
             >
                 ×
             </button>
 
         </div>
 
-
-        <!-- =================================================
-             RETRIEVAL METRICS
-             ================================================= -->
 
         <div class="metrics-grid">
 
@@ -698,7 +817,7 @@
             <div class="metric-card">
 
                 <span>
-                    Top Score
+                    Top Match
                 </span>
 
                 <strong id="metric-top-score">
@@ -711,7 +830,7 @@
             <div class="metric-card">
 
                 <span>
-                    Score Gap
+                    Match Gap
                 </span>
 
                 <strong id="metric-score-gap">
@@ -724,7 +843,7 @@
             <div class="metric-card">
 
                 <span>
-                    Selected
+                    Sources Used
                 </span>
 
                 <strong id="metric-selected">
@@ -737,7 +856,7 @@
             <div class="metric-card">
 
                 <span>
-                    Filtered Noise
+                    Filtered
                 </span>
 
                 <strong id="metric-filtered">
@@ -749,16 +868,11 @@
         </div>
 
 
-        <!-- =================================================
-             QUERY REWRITE
-             ================================================= -->
-
         <div class="diagnostics-section">
 
             <h4>
-                Query Rewrite
+                Question Understanding
             </h4>
-
 
             <div class="diagnostic-row">
 
@@ -776,7 +890,7 @@
             <div class="diagnostic-block">
 
                 <span>
-                    Original Query
+                    Your Question
                 </span>
 
                 <p id="original-query">
@@ -789,7 +903,7 @@
             <div class="diagnostic-block">
 
                 <span>
-                    Retrieval Query
+                    Search Query
                 </span>
 
                 <p id="retrieval-query">
@@ -801,16 +915,11 @@
         </div>
 
 
-        <!-- =================================================
-             RETRIEVED DOCUMENTS
-             ================================================= -->
-
         <div class="diagnostics-section">
 
             <h4>
-                Retrieved Documents
+                Supporting Documents
             </h4>
-
 
             <div
                 id="retrieved-list"
@@ -818,7 +927,7 @@
             >
 
                 <p class="muted">
-                    Henüz retrieval sonucu yok.
+                    No answer details yet.
                 </p>
 
             </div>
@@ -849,21 +958,20 @@
                 <div>
 
                     <p class="eyebrow">
-                        SOURCE INSPECTOR
+                        SOURCE
                     </p>
 
                     <h3 id="source-modal-title">
-                        Source
+                        Document
                     </h3>
 
                 </div>
-
 
                 <button
                     id="close-source-modal"
                     class="icon-button"
                     type="button"
-                    aria-label="Close source inspector"
+                    aria-label="Close source"
                 >
                     ×
                 </button>
@@ -874,7 +982,7 @@
             <div class="source-score-row">
 
                 <span>
-                    Similarity Score
+                    Relevance
                 </span>
 
                 <strong id="source-modal-score">
@@ -887,7 +995,7 @@
             <div class="source-content-box">
 
                 <span>
-                    Retrieved Evidence
+                    Supporting passage
                 </span>
 
                 <pre id="source-modal-content"></pre>

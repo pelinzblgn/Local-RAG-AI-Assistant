@@ -13,6 +13,7 @@ from src.file_sync import (
     synchronize_knowledge_base,
 )
 
+from src.ingestion import ingest_text_file
 
 def test_same_file_produces_same_hash(
     tmp_path: Path,
@@ -527,3 +528,64 @@ def test_sync_result_reports_change_count() -> None:
     )
 
     assert result.has_changes is True
+    def test_external_source_is_preserved_during_managed_sync(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        raw_directory = tmp_path / "raw"
+        raw_directory.mkdir()
+
+        managed_file = raw_directory / "managed.txt"
+        managed_file.write_text(
+            "Managed source content",
+            encoding="utf-8",
+        )
+
+        external_file = tmp_path / "external_notes.txt"
+        external_file.write_text(
+            "External source content",
+            encoding="utf-8",
+        )
+
+        database_path = tmp_path / "rag.db"
+
+        def fake_generate_embeddings(
+            texts: list[str],
+        ) -> list[list[float]]:
+            return [
+                [0.1, 0.2, 0.3]
+                for _ in texts
+            ]
+
+        monkeypatch.setattr(
+            "src.ingestion.generate_embeddings",
+            fake_generate_embeddings,
+        )
+
+        ingest_text_file(
+            file_path=managed_file,
+            database_path=database_path,
+        )
+
+        ingest_text_file(
+            file_path=external_file,
+            database_path=database_path,
+            source_name="external/external_notes.txt",
+        )
+
+        synchronize_knowledge_base(
+            raw_data_directory=raw_directory,
+            database_path=database_path,
+        )
+
+        source_records = get_all_source_files(
+            database_path
+        )
+
+        stored_sources = {
+            record["source"]
+            for record in source_records
+        }
+
+        assert "managed.txt" in stored_sources
+        assert "external/external_notes.txt" in stored_sources

@@ -1,9 +1,13 @@
+import tempfile
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import (
     FastAPI,
+    File,
     HTTPException,
+    UploadFile,
     status,
 )
 from fastapi.staticfiles import StaticFiles
@@ -17,8 +21,14 @@ from src.agent import LocalAgent
 from src.agent_models import AgentResult
 from src.agent_tools import ToolRegistry
 from src.assistant import RAGAssistant
+from src.database import (
+    get_unique_document_sources,
+)
 from src.file_sync import (
     synchronize_knowledge_base,
+)
+from src.ingestion import (
+    ingest_selected_source,
 )
 from src.knowledge_tools import (
     KnowledgeSearchTool,
@@ -32,7 +42,17 @@ from src.web import (
 
 
 API_TITLE = "Local RAG AI Assistant API"
-API_VERSION = "1.1.0"
+API_VERSION = "1.3.0"
+
+MAX_UPLOAD_SIZE_BYTES = (
+    5 * 1024 * 1024
+)
+
+SUPPORTED_UPLOAD_EXTENSIONS = {
+    ".txt",
+    ".pdf",
+    ".docx",
+}
 
 
 # ==========================================================
@@ -41,8 +61,6 @@ API_VERSION = "1.1.0"
 
 
 class ChatRequest(BaseModel):
-    """Question payload accepted by the RAG API."""
-
     model_config = ConfigDict(
         str_strip_whitespace=True,
     )
@@ -54,28 +72,16 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """
-    Public response returned by the local RAG assistant.
-    """
-
     answer: str
-
     sources: list[str]
-
     confidence: dict[str, Any]
-
     query_rewrite: dict[str, Any]
-
     retrieved_documents: list[
         dict[str, Any]
     ]
 
 
 class AgentRequest(BaseModel):
-    """
-    User request accepted by the local agent.
-    """
-
     model_config = ConfigDict(
         str_strip_whitespace=True,
     )
@@ -91,112 +97,76 @@ class AgentRequest(BaseModel):
 
 
 class AgentDecisionResponse(BaseModel):
-    """Public representation of an agent decision."""
-
     intent: str
-
     tool_name: str | None
-
     reason: str
-
     confidence: float
 
 
 class AgentStepResponse(BaseModel):
-    """One observable agent execution step."""
-
     name: str
-
     status: str
-
     detail: str
-
     tool_name: str | None
 
 
 class AgentToolResultResponse(BaseModel):
-    """Public representation of a tool result."""
-
     success: bool
-
     content: str
-
     data: dict[str, Any]
-
     error: str | None
 
 
 class AgentResponse(BaseModel):
-    """
-    Observable result returned by the local agent.
-    """
-
     answer: str
-
     succeeded: bool
-
     decision: AgentDecisionResponse
-
     steps: list[
         AgentStepResponse
     ]
-
     tool_result: (
         AgentToolResultResponse
         | None
     )
-
     metadata: dict[str, Any]
 
 
 class HistoryResponse(BaseModel):
-    """
-    Current successful conversation history.
-    """
-
     history: str
-
     is_empty: bool
 
 
 class MessageResponse(BaseModel):
-    """Generic API message response."""
-
     message: str
 
 
 class HealthResponse(BaseModel):
-    """
-    Application and local-runtime health information.
-    """
-
     status: str
-
     assistant_ready: bool
-
     agent_ready: bool
-
     local_only: bool
 
 
 class SyncResponse(BaseModel):
-    """
-    Knowledge-base synchronization result.
-    """
-
     new_files: list[str]
-
     modified_files: list[str]
-
     deleted_files: list[str]
-
     unchanged_files: list[str]
-
     inserted_chunks: int
-
     deleted_chunks: int
-
     has_changes: bool
+
+
+class KnowledgeImportResponse(BaseModel):
+    file_count: int
+    inserted_chunks: int
+    sources: list[str]
+    message: str
+
+
+class KnowledgeSourcesResponse(BaseModel):
+    source_count: int
+    sources: list[str]
 
 
 # ==========================================================
@@ -209,10 +179,6 @@ _agent: LocalAgent | None = None
 
 
 def get_assistant() -> RAGAssistant:
-    """
-    Return the application-level RAG assistant.
-    """
-
     if _assistant is None:
         raise RuntimeError(
             "RAG assistant is not initialized."
@@ -222,10 +188,6 @@ def get_assistant() -> RAGAssistant:
 
 
 def get_agent() -> LocalAgent:
-    """
-    Return the application-level local agent.
-    """
-
     if _agent is None:
         raise RuntimeError(
             "Local agent is not initialized."
@@ -237,12 +199,6 @@ def get_agent() -> LocalAgent:
 def set_assistant_for_testing(
     assistant: RAGAssistant | None,
 ) -> None:
-    """
-    Override the application-level assistant.
-
-    This exists for isolated API tests.
-    """
-
     global _assistant
 
     _assistant = assistant
@@ -251,12 +207,6 @@ def set_assistant_for_testing(
 def set_agent_for_testing(
     agent: LocalAgent | None,
 ) -> None:
-    """
-    Override the application-level agent.
-
-    This exists for isolated API tests.
-    """
-
     global _agent
 
     _agent = agent
@@ -271,13 +221,6 @@ def set_agent_for_testing(
 async def lifespan(
     application: FastAPI,
 ):
-    """
-    Manage application-level local AI resources.
-
-    One RAGAssistant instance is created and shared
-    between the direct RAG API and the local agent.
-    """
-
     del application
 
     global _assistant
@@ -357,17 +300,11 @@ app.mount(
     include_in_schema=False,
 )
 def web_interface():
-    """
-    Serve the Local RAG AI Workspace.
-
-    Swagger remains available at /docs.
-    """
-
     return get_index_file()
 
 
 # ==========================================================
-# SYSTEM ENDPOINTS
+# SYSTEM
 # ==========================================================
 
 
@@ -379,12 +316,6 @@ def web_interface():
     ],
 )
 def health() -> HealthResponse:
-    """
-    Return lightweight application health state.
-
-    This endpoint does not trigger model inference.
-    """
-
     return HealthResponse(
         status="ok",
         assistant_ready=(
@@ -398,7 +329,7 @@ def health() -> HealthResponse:
 
 
 # ==========================================================
-# RAG ENDPOINTS
+# RAG
 # ==========================================================
 
 
@@ -412,10 +343,6 @@ def health() -> HealthResponse:
 def chat(
     request: ChatRequest,
 ) -> ChatResponse:
-    """
-    Ask the local RAG assistant a grounded question.
-    """
-
     try:
         assistant = get_assistant()
 
@@ -478,9 +405,7 @@ def chat(
             ]
         ),
         retrieved_documents=[
-            dict(
-                document
-            )
+            dict(document)
             for document
             in response[
                 "retrieved_documents"
@@ -490,7 +415,7 @@ def chat(
 
 
 # ==========================================================
-# AGENT ENDPOINTS
+# AGENT
 # ==========================================================
 
 
@@ -504,17 +429,6 @@ def chat(
 def run_agent(
     request: AgentRequest,
 ) -> AgentResponse:
-    """
-    Process one request through the local agent.
-
-    The agent:
-
-    - analyzes intent
-    - selects an allowed local tool
-    - executes the capability
-    - returns an observable execution trace
-    """
-
     try:
         agent = get_agent()
 
@@ -566,11 +480,6 @@ def run_agent(
 def _serialize_agent_result(
     result: AgentResult,
 ) -> AgentResponse:
-    """
-    Convert the internal agent domain model into
-    the stable public API representation.
-    """
-
     tool_result = None
 
     if result.tool_result is not None:
@@ -625,7 +534,7 @@ def _serialize_agent_result(
 
 
 # ==========================================================
-# CONVERSATION ENDPOINTS
+# CONVERSATION
 # ==========================================================
 
 
@@ -637,10 +546,6 @@ def _serialize_agent_result(
     ],
 )
 def history() -> HistoryResponse:
-    """
-    Return successful conversation history.
-    """
-
     try:
         assistant = get_assistant()
 
@@ -687,10 +592,6 @@ def history() -> HistoryResponse:
     ],
 )
 def clear_history() -> MessageResponse:
-    """
-    Clear current conversational memory.
-    """
-
     try:
         assistant = get_assistant()
 
@@ -726,7 +627,46 @@ def clear_history() -> MessageResponse:
 
 
 # ==========================================================
-# KNOWLEDGE BASE ENDPOINTS
+# KNOWLEDGE BASE SOURCES
+# ==========================================================
+
+
+@app.get(
+    "/knowledge/sources",
+    response_model=KnowledgeSourcesResponse,
+    tags=[
+        "Knowledge Base",
+    ],
+)
+def knowledge_sources() -> KnowledgeSourcesResponse:
+    try:
+        sources = (
+            get_unique_document_sources()
+        )
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=(
+                "Knowledge-base sources "
+                "could not be retrieved."
+            ),
+        ) from error
+
+    return KnowledgeSourcesResponse(
+        source_count=len(
+            sources
+        ),
+        sources=list(
+            sources
+        ),
+    )
+
+
+# ==========================================================
+# KNOWLEDGE BASE SYNC
 # ==========================================================
 
 
@@ -738,11 +678,6 @@ def clear_history() -> MessageResponse:
     ],
 )
 def sync_knowledge_base() -> SyncResponse:
-    """
-    Synchronize local source files with the SQLite
-    knowledge base.
-    """
-
     try:
         result = (
             synchronize_knowledge_base()
@@ -779,5 +714,201 @@ def sync_knowledge_base() -> SyncResponse:
         ),
         has_changes=(
             result.has_changes
+        ),
+    )
+
+
+# ==========================================================
+# EXTERNAL KNOWLEDGE FILE UPLOAD
+# ==========================================================
+
+
+@app.post(
+    "/knowledge/files",
+    response_model=KnowledgeImportResponse,
+    status_code=(
+        status.HTTP_201_CREATED
+    ),
+    tags=[
+        "Knowledge Base",
+    ],
+)
+async def import_knowledge_file(
+    file: UploadFile = File(...),
+) -> KnowledgeImportResponse:
+    original_name = Path(
+        file.filename or ""
+    ).name.strip()
+
+    if not original_name:
+        await file.close()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_ENTITY
+            ),
+            detail=(
+                "A valid file name is required."
+            ),
+        )
+
+    original_suffix = (
+        Path(original_name)
+        .suffix
+        .lower()
+    )
+
+    if (
+        original_suffix
+        not in SUPPORTED_UPLOAD_EXTENSIONS
+    ):
+        await file.close()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+            ),
+            detail=(
+                "Supported document types are "
+                "TXT, PDF, and DOCX."
+            ),
+        )
+
+    temporary_path: Path | None = None
+
+    try:
+        content = await file.read(
+            MAX_UPLOAD_SIZE_BYTES
+            + 1
+        )
+
+        if not content:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY
+                ),
+                detail=(
+                    "The selected document is empty."
+                ),
+            )
+
+        if (
+            len(content)
+            > MAX_UPLOAD_SIZE_BYTES
+        ):
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    "The selected document exceeds "
+                    "the 5 MB upload limit."
+                ),
+            )
+
+        if original_suffix == ".txt":
+            try:
+                content.decode(
+                    "utf-8"
+                )
+
+            except UnicodeDecodeError as error:
+                raise HTTPException(
+                    status_code=(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY
+                    ),
+                    detail=(
+                        "TXT documents must contain "
+                        "valid UTF-8 text."
+                    ),
+                ) from error
+
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            suffix=original_suffix,
+            delete=False,
+        ) as temporary_file:
+            temporary_file.write(
+                content
+            )
+
+            temporary_path = Path(
+                temporary_file.name
+            )
+
+        result = ingest_selected_source(
+            source_path=temporary_path,
+            external_source_name=original_name,
+        )
+
+    except HTTPException:
+        raise
+
+    except (
+        TypeError,
+        ValueError,
+        RuntimeError,
+    ) as error:
+        if original_suffix == ".pdf":
+            safe_detail = (
+                "The PDF document could not be read "
+                "or contains no extractable text."
+            )
+
+        elif original_suffix == ".docx":
+            safe_detail = (
+                "The DOCX document could not be read "
+                "or contains no extractable text."
+            )
+
+        else:
+            safe_detail = (
+                "The selected document could not be processed."
+            )
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_ENTITY
+            ),
+            detail=safe_detail,
+        ) from error
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=(
+                "The selected document could not be "
+                "added to the local knowledge base."
+            ),
+        ) from error
+
+    finally:
+        await file.close()
+
+        if (
+            temporary_path is not None
+            and temporary_path.exists()
+        ):
+            try:
+                temporary_path.unlink()
+
+            except OSError:
+                pass
+
+    return KnowledgeImportResponse(
+        file_count=result[
+            "file_count"
+        ],
+        inserted_chunks=result[
+            "inserted_chunks"
+        ],
+        sources=list(
+            result[
+                "sources"
+            ]
+        ),
+        message=(
+            f"{original_name} was added to "
+            "the local knowledge base."
         ),
     )

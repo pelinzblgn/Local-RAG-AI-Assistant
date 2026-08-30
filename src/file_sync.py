@@ -14,7 +14,10 @@ from src.database import (
     initialize_database,
 )
 from src.document_loader import find_text_files
-from src.ingestion import ingest_text_file
+from src.ingestion import (
+    EXTERNAL_SOURCE_PREFIX,
+    ingest_text_file,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -91,10 +94,42 @@ def calculate_file_hash(
     return sha256.hexdigest()
 
 
+def _is_external_source(
+    source_name: str,
+) -> bool:
+    """
+    Return whether a source belongs to user-selected external data.
+
+    External sources are intentionally excluded from the managed
+    ``data/raw`` Smart Sync lifecycle.
+
+    This prevents the normal knowledge-base synchronization process
+    from treating user-imported documents as deleted simply because
+    they are not present inside ``data/raw``.
+    """
+
+    if not isinstance(source_name, str):
+        return False
+
+    prefix = (
+        EXTERNAL_SOURCE_PREFIX
+        + "/"
+    )
+
+    return source_name.startswith(
+        prefix
+    )
+
+
 def _build_current_file_map(
     raw_data_directory: Path,
 ) -> dict[str, Path]:
-    """Return current TXT source files indexed by file name."""
+    """
+    Return managed TXT source files indexed by file name.
+
+    Only the project's configured ``data/raw`` directory participates
+    in this map. User-selected external sources are managed separately.
+    """
 
     text_files = find_text_files(
         raw_data_directory
@@ -106,14 +141,58 @@ def _build_current_file_map(
     }
 
 
+def _build_managed_source_map(
+    stored_records: list[dict],
+) -> dict[str, dict]:
+    """
+    Return manifest records managed by the normal Smart Sync process.
+
+    Records whose source identifiers begin with ``external/`` are
+    deliberately excluded so that normal synchronization cannot
+    modify or delete user-selected external knowledge sources.
+    """
+
+    managed_records: dict[str, dict] = {}
+
+    for record in stored_records:
+        source_name = record["source"]
+
+        if _is_external_source(
+            source_name
+        ):
+            logger.debug(
+                (
+                    "Harici kaynak normal Smart Sync "
+                    "kapsamı dışında bırakıldı: %s"
+                ),
+                source_name,
+            )
+            continue
+
+        managed_records[
+            source_name
+        ] = record
+
+    return managed_records
+
+
 def synchronize_knowledge_base(
     raw_data_directory: Path = RAW_DATA_DIRECTORY,
     database_path: Path = DATABASE_PATH,
 ) -> SyncResult:
     """
-    Synchronize local TXT documents with the SQLite knowledge base.
+    Synchronize managed local TXT documents with the SQLite
+    knowledge base.
 
-    Behavior:
+    Only documents belonging to the managed ``data/raw`` source
+    directory participate in this synchronization.
+
+    User-selected sources whose identifiers begin with
+    ``external/`` are intentionally preserved and are not treated
+    as NEW, MODIFIED, DELETED, or UNCHANGED by this operation.
+
+    Behavior for managed sources:
+
         NEW:
             Embed and index only the new file.
 
@@ -130,7 +209,7 @@ def synchronize_knowledge_base(
 
     Args:
         raw_data_directory:
-            Directory containing source TXT files.
+            Directory containing managed TXT source files.
 
         database_path:
             SQLite knowledge-base path.
@@ -151,10 +230,9 @@ def synchronize_knowledge_base(
         database_path
     )
 
-    stored_by_name = {
-        record["source"]: record
-        for record in stored_records
-    }
+    stored_by_name = _build_managed_source_map(
+        stored_records
+    )
 
     new_files: list[str] = []
     modified_files: list[str] = []
@@ -165,7 +243,7 @@ def synchronize_knowledge_base(
     deleted_chunks = 0
 
     # ======================================================
-    # New / Modified / Unchanged
+    # New / Modified / Unchanged managed sources
     # ======================================================
 
     for source_name in sorted(
@@ -239,7 +317,9 @@ def synchronize_knowledge_base(
             )
         )
 
-        deleted_chunks += removed_count
+        deleted_chunks += (
+            removed_count
+        )
 
         try:
             new_chunk_count = ingest_text_file(
@@ -267,7 +347,7 @@ def synchronize_knowledge_base(
         )
 
     # ======================================================
-    # Deleted
+    # Deleted managed sources
     # ======================================================
 
     current_source_names = set(
@@ -284,7 +364,7 @@ def synchronize_knowledge_base(
             continue
 
         logger.info(
-            "Silinen kaynak bulundu: %s",
+            "Silinen yönetilen kaynak bulundu: %s",
             source_name,
         )
 
@@ -325,6 +405,14 @@ def synchronize_knowledge_base(
         deleted_chunks=deleted_chunks,
     )
 
+    external_source_count = sum(
+        1
+        for record in stored_records
+        if _is_external_source(
+            record["source"]
+        )
+    )
+
     logger.info(
         (
             "Knowledge base sync tamamlandı | "
@@ -332,6 +420,7 @@ def synchronize_knowledge_base(
             "Değişen: %d | "
             "Silinen: %d | "
             "Değişmeyen: %d | "
+            "Korunan harici kaynak: %d | "
             "Eklenen chunk: %d | "
             "Silinen chunk: %d"
         ),
@@ -339,6 +428,7 @@ def synchronize_knowledge_base(
         len(result.modified_files),
         len(result.deleted_files),
         len(result.unchanged_files),
+        external_source_count,
         result.inserted_chunks,
         result.deleted_chunks,
     )

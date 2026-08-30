@@ -195,6 +195,42 @@ const toast =
     );
 
 
+const knowledgeFileInput =
+    document.getElementById(
+        "knowledge-file-input"
+    );
+
+
+const selectKnowledgeFileButton =
+    document.getElementById(
+        "select-knowledge-file-button"
+    );
+
+
+const selectedFileInfo =
+    document.getElementById(
+        "selected-file-info"
+    );
+
+
+const selectedFileName =
+    document.getElementById(
+        "selected-file-name"
+    );
+
+
+const uploadKnowledgeFileButton =
+    document.getElementById(
+        "upload-knowledge-file-button"
+    );
+
+
+const knowledgeUploadStatus =
+    document.getElementById(
+        "knowledge-upload-status"
+    );
+
+
 /* =========================================================
    APPLICATION STATE
    ========================================================= */
@@ -219,6 +255,20 @@ let latestHealth =
 let diagnosticsAvailable =
     false;
 
+
+let selectedKnowledgeFile =
+    null;
+
+
+const MAX_KNOWLEDGE_FILE_SIZE =
+    5 * 1024 * 1024;
+
+
+const SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS = [
+    ".txt",
+    ".pdf",
+    ".docx"
+];
 
 /* =========================================================
    GENERAL HELPERS
@@ -439,27 +489,27 @@ function setMode(
         isAssistant
     ) {
         workspaceTitle.textContent =
-            "Ask your local knowledge base";
+            "What are you working on today?";
 
 
         workspaceDescription.textContent =
-            "Answers are grounded only in your indexed local documents.";
+            "Ask questions, review concepts, and explore your own documents privately.";
 
 
         modeStatusTitle.textContent =
-            "Assistant Mode";
+            "Study Mode";
 
 
         modeStatusDetail.textContent =
-            "Direct RAG pipeline";
+            "Your document library";
 
 
         composerModeLabel.textContent =
-            "Local inference · Direct RAG";
+            "Private · On-device";
 
 
         questionInput.placeholder =
-            "Yerel belgeleriniz hakkında bir soru sorun...";
+            "Ask something from your documents...";
 
 
         sendButton.textContent =
@@ -485,7 +535,7 @@ function setMode(
 
 
         modeStatusDot.style.boxShadow =
-            "0 0 14px rgba(124, 140, 255, 0.55)";
+            "none";
 
 
         agentPanel
@@ -497,11 +547,11 @@ function setMode(
 
     else {
         workspaceTitle.textContent =
-            "Run your local AI agent";
+            "Work with your documents";
 
 
         workspaceDescription.textContent =
-            "The agent detects intent, selects an allowed local tool and returns a traceable result.";
+            "Use LocalMind's controlled local tools to search, check, and manage your knowledge library.";
 
 
         modeStatusTitle.textContent =
@@ -509,15 +559,15 @@ function setMode(
 
 
         modeStatusDetail.textContent =
-            "Intent · tool · execution";
+            "Controlled local actions";
 
 
         composerModeLabel.textContent =
-            "Local inference · Bounded Agent";
+            "Private · Local tools";
 
 
         questionInput.placeholder =
-            "Agent'a bir görev veya bilgi isteği yazın...";
+            "Tell LocalMind what you want to do...";
 
 
         sendButton.textContent =
@@ -539,7 +589,7 @@ function setMode(
 
 
         modeStatusDot.style.boxShadow =
-            "0 0 14px rgba(156, 107, 255, 0.55)";
+            "none";
     }
 
 
@@ -592,7 +642,7 @@ function updateHealthDisplay() {
 
 
         healthDot.style.boxShadow =
-            "0 0 14px rgba(74, 222, 128, 0.35)";
+            "none";
 
 
         healthTitle.textContent =
@@ -602,8 +652,8 @@ function updateHealthDisplay() {
         healthDetail.textContent =
             currentMode
             === "agent"
-                ? "Local agent available"
-                : "Local models available";
+                ? "Local tools available"
+                : "LocalMind is ready";
 
 
         return;
@@ -615,7 +665,7 @@ function updateHealthDisplay() {
 
 
     healthDot.style.boxShadow =
-        "0 0 14px rgba(251, 113, 133, 0.35)";
+        "none";
 
 
     healthTitle.textContent =
@@ -625,8 +675,8 @@ function updateHealthDisplay() {
     healthDetail.textContent =
         currentMode
         === "agent"
-            ? "Agent not ready"
-            : "Assistant not ready";
+            ? "Local tools unavailable"
+            : "LocalMind is unavailable";
 }
 
 
@@ -668,7 +718,7 @@ async function loadHealth() {
 
 
         healthDot.style.boxShadow =
-            "0 0 14px rgba(251, 113, 133, 0.35)";
+            "none";
 
 
         healthTitle.textContent =
@@ -676,7 +726,7 @@ async function loadHealth() {
 
 
         healthDetail.textContent =
-            "Backend not ready";
+            "Local service not ready";
     }
 }
 
@@ -901,7 +951,7 @@ function addAgentMessage(
             <p>
                 ${escapeHtml(
                     response.answer
-                    || "Agent completed without a response."
+                    || "LocalMind completed the action without a response."
                 )}
             </p>
 
@@ -915,8 +965,8 @@ function addAgentMessage(
                 >
                     ${
                         succeeded
-                            ? "Agent succeeded"
-                            : "Agent failed"
+                            ? "Completed"
+                            : "Failed"
                     }
                 </span>
 
@@ -993,7 +1043,7 @@ function addErrorMessage(
                         confidence-low
                     "
                 >
-                    Request failed
+                    Something went wrong
                 </span>
 
             </div>
@@ -1023,7 +1073,7 @@ function openSourceInspector(
         !retrievedDocument
     ) {
         showToast(
-            "Kaynak detayı bulunamadı."
+            "Source details are not available."
         );
 
 
@@ -1045,7 +1095,7 @@ function openSourceInspector(
 
     sourceModalContent.textContent =
         retrievedDocument.content
-        || "İçerik bulunamadı.";
+        || "No source content is available.";
 
 
     sourceModal
@@ -1077,7 +1127,7 @@ function openSourceByName(
         )
     ) {
         showToast(
-            "Bu cevap için retrieval bilgisi bulunamadı."
+            "Answer details are not available for this response."
         );
 
 
@@ -1268,7 +1318,7 @@ function updateDiagnostics(
     ) {
         retrievedList.innerHTML = `
             <p class="muted">
-                No retrieved documents.
+                No supporting documents were retrieved.
             </p>
         `;
 
@@ -1325,7 +1375,7 @@ function updateDiagnostics(
                         retrieved-score
                     "
                 >
-                    Similarity:
+                    Relevance:
                     ${Number(
                         retrievedDocument
                             .score
@@ -1411,7 +1461,7 @@ function resetDiagnostics() {
         "retrieved-list"
     ).innerHTML = `
         <p class="muted">
-            Henüz retrieval sonucu yok.
+            No answer details yet.
         </p>
     `;
 
@@ -1512,7 +1562,7 @@ function updateAgentTrace(
         "agent-result-status"
     ).textContent =
         response.succeeded
-            ? "SUCCEEDED"
+            ? "COMPLETED"
             : "FAILED";
 
 
@@ -1561,7 +1611,7 @@ function renderAgentSteps(
     ) {
         container.innerHTML = `
             <p class="muted">
-                No execution steps returned.
+                No execution steps were returned.
             </p>
         `;
 
@@ -1677,7 +1727,7 @@ function resetAgentTrace() {
     document.getElementById(
         "agent-reason"
     ).textContent =
-        "No agent execution yet.";
+        "No agent action yet.";
 
 
     document.getElementById(
@@ -1705,7 +1755,7 @@ function resetAgentTrace() {
         "agent-steps"
     ).innerHTML = `
         <p class="muted">
-            Henüz agent çalıştırılmadı.
+            No agent action yet.
         </p>
     `;
 
@@ -1732,15 +1782,6 @@ function extractRagPayloadFromAgent(
 
     const data =
         toolResult.data || {};
-
-
-    /*
-        knowledge_search çıktısının backend sürümüne göre
-        RAG alanları doğrudan data içinde veya nested bir
-        response/result alanında bulunabilir.
-
-        Bu nedenle UI katmanı birkaç güvenli biçimi destekler.
-    */
 
 
     const candidates = [
@@ -1818,7 +1859,7 @@ function extractRagPayloadFromAgent(
 
 
 /* =========================================================
-   ASSISTANT REQUEST
+   CHAT REQUEST
    ========================================================= */
 
 
@@ -1856,7 +1897,7 @@ async function askAssistant(
     ) {
         throw new Error(
             payload.detail
-            || "Assistant request failed."
+            || "LocalMind could not answer this question."
         );
     }
 
@@ -1914,7 +1955,7 @@ async function runAgent(
     ) {
         throw new Error(
             payload.detail
-            || "Agent request failed."
+            || "LocalMind could not complete this action."
         );
     }
 
@@ -1937,12 +1978,6 @@ async function runAgent(
             ?.selected_tool
         ||
         "";
-
-
-    /*
-        Retrieval Diagnostics sadece agent gerçekten
-        knowledge_search kullandıysa gösterilir.
-    */
 
 
     if (
@@ -1995,7 +2030,7 @@ async function submitRequest(
     sendButton.textContent =
         currentMode
         === "agent"
-            ? "Running..."
+            ? "Working..."
             : "Thinking...";
 
 
@@ -2021,7 +2056,7 @@ async function submitRequest(
     ) {
         addErrorMessage(
             error.message
-            || "Unexpected error."
+            || "Something went wrong."
         );
     }
 
@@ -2043,8 +2078,195 @@ async function submitRequest(
 
 
 /* =========================================================
-   KNOWLEDGE BASE
+   KNOWLEDGE LIBRARY
    ========================================================= */
+
+
+function setKnowledgeUploadStatus(
+    message,
+    state = ""
+) {
+    knowledgeUploadStatus.textContent =
+        message || "";
+
+
+    knowledgeUploadStatus.classList.remove(
+        "success",
+        "error",
+        "loading"
+    );
+
+
+    if (
+        state
+    ) {
+        knowledgeUploadStatus
+            .classList
+            .add(
+                state
+            );
+    }
+}
+
+
+function resetKnowledgeFileSelection() {
+    selectedKnowledgeFile =
+        null;
+
+
+    knowledgeFileInput.value =
+        "";
+
+
+    selectedFileName.textContent =
+        "-";
+
+
+    selectedFileInfo
+        .classList
+        .add(
+            "hidden"
+        );
+
+
+    uploadKnowledgeFileButton
+        .classList
+        .add(
+            "hidden"
+        );
+
+
+    uploadKnowledgeFileButton.disabled =
+        true;
+}
+
+
+function validateKnowledgeFile(
+    file
+) {
+    if (
+        !file
+    ) {
+        throw new Error(
+            "Choose a TXT, PDF, or DOCX document first."
+        );
+    }
+
+
+    const fileName =
+        String(
+            file.name || ""
+        ).trim();
+
+
+    const normalizedFileName =
+        fileName.toLowerCase();
+
+
+    const isSupported =
+        SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS
+            .some(
+                extension =>
+                    normalizedFileName
+                        .endsWith(
+                            extension
+                        )
+            );
+
+
+    if (
+        !isSupported
+    ) {
+        throw new Error(
+            "Supported document types are TXT, PDF, and DOCX."
+        );
+    }
+
+
+    if (
+        file.size
+        === 0
+    ) {
+        throw new Error(
+            "The selected document is empty."
+        );
+    }
+
+
+    if (
+        file.size
+        > MAX_KNOWLEDGE_FILE_SIZE
+    ) {
+        throw new Error(
+            "The document exceeds the 5 MB limit."
+        );
+    }
+}
+
+
+function handleKnowledgeFileSelection() {
+    const file =
+        knowledgeFileInput
+            .files?.[0]
+        || null;
+
+
+    try {
+        validateKnowledgeFile(
+            file
+        );
+
+
+        selectedKnowledgeFile =
+            file;
+
+
+        selectedFileName.textContent =
+            file.name;
+
+
+        selectedFileInfo
+            .classList
+            .remove(
+                "hidden"
+            );
+
+
+        uploadKnowledgeFileButton
+            .classList
+            .remove(
+                "hidden"
+            );
+
+
+        uploadKnowledgeFileButton.disabled =
+            false;
+
+
+        setKnowledgeUploadStatus(
+            "Ready to add this document."
+        );
+    }
+
+    catch (
+        error
+    ) {
+        resetKnowledgeFileSelection();
+
+
+        setKnowledgeUploadStatus(
+            error.message
+            || "The document could not be selected.",
+            "error"
+        );
+
+
+        showToast(
+            error.message
+            || "The document could not be selected."
+        );
+    }
+}
 
 
 function renderSources(
@@ -2054,7 +2276,33 @@ function renderSources(
         Array.isArray(
             sources
         )
-            ? sources
+            ? [
+                ...new Set(
+                    sources
+                        .map(
+                            source =>
+                                String(
+                                    source || ""
+                                ).trim()
+                        )
+                        .filter(
+                            Boolean
+                        )
+                )
+            ].sort(
+                (
+                    first,
+                    second
+                ) =>
+                    first.localeCompare(
+                        second,
+                        undefined,
+                        {
+                            sensitivity:
+                                "base"
+                        }
+                    )
+            )
             : [];
 
 
@@ -2070,7 +2318,7 @@ function renderSources(
     ) {
         sourceList.innerHTML = `
             <p class="muted">
-                No indexed sources.
+                Your library is empty.
             </p>
         `;
 
@@ -2095,6 +2343,241 @@ function renderSources(
 }
 
 
+/*
+ * Load the complete knowledge library directly from SQLite
+ * through the API.
+ *
+ * This endpoint is the canonical source for the Library UI.
+ * It includes both:
+ *
+ * - managed documents from data/raw
+ * - explicitly uploaded external documents
+ */
+async function loadKnowledgeSources() {
+    const response =
+        await fetch(
+            "/knowledge/sources"
+        );
+
+
+    let payload =
+        {};
+
+
+    try {
+        payload =
+            await response.json();
+    }
+
+    catch {
+        payload =
+            {};
+    }
+
+
+    if (
+        !response.ok
+    ) {
+        throw new Error(
+            payload.detail
+            || "Your library could not be loaded."
+        );
+    }
+
+
+    const sources =
+        Array.isArray(
+            payload.sources
+        )
+            ? payload.sources
+            : [];
+
+
+    renderSources(
+        sources
+    );
+
+
+    return sources;
+}
+
+
+async function uploadKnowledgeFile() {
+    if (
+    !selectedKnowledgeFile
+) {
+    setKnowledgeUploadStatus(
+        "Choose a TXT, PDF, or DOCX document first.",
+        "error"
+    );
+
+
+    return;
+}
+
+
+    try {
+        validateKnowledgeFile(
+            selectedKnowledgeFile
+        );
+    }
+
+    catch (
+        error
+    ) {
+        setKnowledgeUploadStatus(
+            error.message,
+            "error"
+        );
+
+
+        return;
+    }
+
+
+    const fileToUpload =
+        selectedKnowledgeFile;
+
+
+    const formData =
+        new FormData();
+
+
+    formData.append(
+        "file",
+        fileToUpload
+    );
+
+
+    selectKnowledgeFileButton.disabled =
+        true;
+
+
+    uploadKnowledgeFileButton.disabled =
+        true;
+
+
+    uploadKnowledgeFileButton.textContent =
+        "Adding...";
+
+
+    setKnowledgeUploadStatus(
+        "Adding this document to your private library...",
+        "loading"
+    );
+
+
+    try {
+        const response =
+            await fetch(
+                "/knowledge/files",
+                {
+                    method:
+                        "POST",
+
+                    body:
+                        formData
+                }
+            );
+
+
+        let payload =
+            {};
+
+
+        try {
+            payload =
+                await response.json();
+        }
+
+        catch {
+            payload =
+                {};
+        }
+
+
+        if (
+            !response.ok
+        ) {
+            throw new Error(
+                payload.detail
+                || "The document could not be added."
+            );
+        }
+
+
+        /*
+         * Do not manually merge the uploaded source into
+         * the sidebar. Reload the canonical Library state
+         * from the backend instead.
+         */
+        await loadKnowledgeSources();
+
+
+        const insertedChunks =
+            Number(
+                payload.inserted_chunks
+                || 0
+            );
+
+
+        setKnowledgeUploadStatus(
+            `${
+                fileToUpload.name
+            } added successfully · ${
+                insertedChunks
+            } chunk${
+                insertedChunks === 1
+                    ? ""
+                    : "s"
+            }`,
+            "success"
+        );
+
+
+        showToast(
+            "Document added to your library."
+        );
+
+
+        resetKnowledgeFileSelection();
+    }
+
+    catch (
+        error
+    ) {
+        setKnowledgeUploadStatus(
+            error.message
+            || "The document could not be added.",
+            "error"
+        );
+
+
+        showToast(
+            error.message
+            || "The document could not be added."
+        );
+    }
+
+    finally {
+        selectKnowledgeFileButton.disabled =
+            false;
+
+
+        uploadKnowledgeFileButton.textContent =
+            "Add to Library";
+
+
+        if (
+            selectedKnowledgeFile
+        ) {
+            uploadKnowledgeFileButton.disabled =
+                false;
+        }
+    }
+}
+
+
 async function syncKnowledgeBase(
     showSuccessToast = true
 ) {
@@ -2103,7 +2586,7 @@ async function syncKnowledgeBase(
 
 
     syncButton.textContent =
-        "Syncing...";
+        "Updating...";
 
 
     try {
@@ -2117,8 +2600,19 @@ async function syncKnowledgeBase(
             );
 
 
-        const payload =
-            await response.json();
+        let payload =
+            {};
+
+
+        try {
+            payload =
+                await response.json();
+        }
+
+        catch {
+            payload =
+                {};
+        }
 
 
         if (
@@ -2126,50 +2620,20 @@ async function syncKnowledgeBase(
         ) {
             throw new Error(
                 payload.detail
-                || "Sync failed."
+                || "Your library could not be updated."
             );
         }
 
 
-        const combinedSources = [
-            ...(
-                Array.isArray(
-                    payload.unchanged_files
-                )
-                    ? payload.unchanged_files
-                    : []
-            ),
-
-            ...(
-                Array.isArray(
-                    payload.new_files
-                )
-                    ? payload.new_files
-                    : []
-            ),
-
-            ...(
-                Array.isArray(
-                    payload.modified_files
-                )
-                    ? payload.modified_files
-                    : []
-            )
-        ];
-
-
-        const uniqueSources =
-            [
-                ...new Set(
-                    combinedSources
-                )
-            ]
-            .sort();
-
-
-        renderSources(
-            uniqueSources
-        );
+        /*
+         * /sync manages only the application's managed
+         * data/raw knowledge folder.
+         *
+         * After synchronization, reload the complete
+         * Library from SQLite so uploaded external
+         * documents remain visible.
+         */
+        await loadKnowledgeSources();
 
 
         if (
@@ -2179,16 +2643,19 @@ async function syncKnowledgeBase(
                 payload.has_changes
             ) {
                 showToast(
-                    "Knowledge base synchronized."
+                    "Your library has been updated."
                 );
             }
 
             else {
                 showToast(
-                    "Knowledge base already up to date."
+                    "Your library is already up to date."
                 );
             }
         }
+
+
+        return payload;
     }
 
     catch (
@@ -2196,8 +2663,11 @@ async function syncKnowledgeBase(
     ) {
         showToast(
             error.message
-            || "Sync failed."
+            || "Your library could not be updated."
         );
+
+
+        return null;
     }
 
     finally {
@@ -2206,7 +2676,7 @@ async function syncKnowledgeBase(
 
 
         syncButton.textContent =
-            "Sync Knowledge Base";
+            "Update Library";
     }
 }
 
@@ -2221,19 +2691,40 @@ function renderClearedWelcome() {
         <div class="welcome-card">
 
             <div class="welcome-icon">
-                AI
+                LM
             </div>
 
-            <div>
+            <div class="welcome-content">
+
+                <p class="welcome-label">
+                    LOCALMIND
+                </p>
 
                 <h3>
-                    Conversation cleared
+                    Ready for a new study session
                 </h3>
 
                 <p>
-                    Yeni bir yerel AI oturumu
-                    başlatabilirsiniz.
+                    Ask a question whenever you're ready.
+                    LocalMind will use your private document library
+                    to help you explore the topic.
                 </p>
+
+                <div class="welcome-features">
+
+                    <span>
+                        Private
+                    </span>
+
+                    <span>
+                        On-device
+                    </span>
+
+                    <span>
+                        Source-based
+                    </span>
+
+                </div>
 
             </div>
 
@@ -2258,7 +2749,7 @@ async function clearConversation() {
             !response.ok
         ) {
             throw new Error(
-                "Conversation could not be cleared."
+                "The conversation could not be cleared."
             );
         }
 
@@ -2285,7 +2776,7 @@ async function clearConversation() {
     ) {
         showToast(
             error.message
-            || "Conversation could not be cleared."
+            || "The conversation could not be cleared."
         );
     }
 }
@@ -2390,6 +2881,26 @@ agentModeButton.addEventListener(
 );
 
 
+selectKnowledgeFileButton.addEventListener(
+    "click",
+    () => {
+        knowledgeFileInput.click();
+    }
+);
+
+
+knowledgeFileInput.addEventListener(
+    "change",
+    handleKnowledgeFileSelection
+);
+
+
+uploadKnowledgeFileButton.addEventListener(
+    "click",
+    uploadKnowledgeFile
+);
+
+
 syncButton.addEventListener(
     "click",
     () => {
@@ -2416,7 +2927,7 @@ openDiagnostics.addEventListener(
             !diagnosticsAvailable
         ) {
             showToast(
-                "Bu agent çalıştırmasında retrieval kullanılmadı."
+                "No supporting source search was used for this action."
             );
 
 
@@ -2526,11 +3037,26 @@ async function initializeApplication() {
     resetAgentTrace();
 
 
+    resetKnowledgeFileSelection();
+
+
+    setKnowledgeUploadStatus(
+        ""
+    );
+
+
     setMode(
         "assistant"
     );
 
 
+    /*
+     * Health loading and managed-folder synchronization
+     * are independent.
+     *
+     * syncKnowledgeBase() reloads the complete Library
+     * from /knowledge/sources after synchronization.
+     */
     await Promise.all([
         loadHealth(),
 

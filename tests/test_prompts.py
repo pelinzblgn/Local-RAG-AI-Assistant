@@ -35,7 +35,7 @@ def test_system_prompt_contains_grounding_rules() -> None:
     system_prompt = builder.build_system_prompt()
 
     assert (
-        "only the supplied local document content"
+        "supported by the supplied local document content"
         in system_prompt
     )
 

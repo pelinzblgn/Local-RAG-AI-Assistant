@@ -2,19 +2,20 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from docx import Document
 
+from src.chunker import split_into_chunks
 from src.database import (
     get_all_documents,
     get_all_source_files,
 )
-from src.ingestion import (
-    ingest_text_files,
-)
 from src.document_loader import (
     read_text_file,
 )
-from src.chunker import (
-    split_into_chunks,
+from src.ingestion import (
+    ingest_document_file,
+    ingest_selected_source,
+    ingest_text_files,
 )
 
 
@@ -332,3 +333,461 @@ def test_manifest_hash_changes_when_file_changes(
         first_record["file_hash"]
         != second_record["file_hash"]
     )
+
+
+def test_ingest_document_file_supports_txt(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "knowledge.txt"
+
+    file_path.write_text(
+        "LocalMind supports private document retrieval.",
+        encoding="utf-8",
+    )
+
+    database_path = tmp_path / "test.db"
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.1, 0.2, 0.3],
+        ],
+    ):
+        inserted_count = ingest_document_file(
+            file_path=file_path,
+            database_path=database_path,
+        )
+
+    documents = get_all_documents(
+        database_path
+    )
+
+    assert inserted_count == 1
+    assert len(documents) == 1
+
+    assert (
+        documents[0]["source"]
+        == "knowledge.txt"
+    )
+
+    assert (
+        "LocalMind supports private document retrieval."
+        in documents[0]["content"]
+    )
+
+
+def test_ingest_document_file_supports_docx(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "knowledge.docx"
+
+    document = Document()
+    document.add_paragraph(
+        "DOCX-482 is a LocalMind test identifier."
+    )
+    document.save(file_path)
+
+    database_path = tmp_path / "test.db"
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.2, 0.3, 0.4],
+        ],
+    ):
+        inserted_count = ingest_document_file(
+            file_path=file_path,
+            database_path=database_path,
+        )
+
+    documents = get_all_documents(
+        database_path
+    )
+
+    assert inserted_count == 1
+    assert len(documents) == 1
+
+    assert (
+        documents[0]["source"]
+        == "knowledge.docx"
+    )
+
+    assert (
+        "DOCX-482"
+        in documents[0]["content"]
+    )
+
+
+def test_ingest_document_file_supports_pdf_extracted_text(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "knowledge.pdf"
+
+    file_path.write_bytes(
+        b"placeholder-pdf"
+    )
+
+    database_path = tmp_path / "test.db"
+
+    with (
+        patch(
+            "src.ingestion.read_document_file",
+            return_value=(
+                "PDF-731 is a LocalMind PDF test identifier."
+            ),
+        ),
+        patch(
+            "src.ingestion.generate_embeddings",
+            return_value=[
+                [0.3, 0.4, 0.5],
+            ],
+        ),
+    ):
+        inserted_count = ingest_document_file(
+            file_path=file_path,
+            database_path=database_path,
+        )
+
+    documents = get_all_documents(
+        database_path
+    )
+
+    assert inserted_count == 1
+    assert len(documents) == 1
+
+    assert (
+        documents[0]["source"]
+        == "knowledge.pdf"
+    )
+
+    assert (
+        "PDF-731"
+        in documents[0]["content"]
+    )
+
+
+def test_ingest_document_file_rejects_unsupported_type(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "knowledge.xlsx"
+
+    file_path.write_text(
+        "Unsupported document",
+        encoding="utf-8",
+    )
+
+    database_path = tmp_path / "test.db"
+
+    with pytest.raises(ValueError):
+        ingest_document_file(
+            file_path=file_path,
+            database_path=database_path,
+        )
+
+
+def test_selected_source_uses_external_txt_source_name(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "notes.txt"
+
+    file_path.write_text(
+        "External TXT document",
+        encoding="utf-8",
+    )
+
+    database_path = tmp_path / "test.db"
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.1, 0.2],
+        ],
+    ):
+        result = ingest_selected_source(
+            source_path=file_path,
+            database_path=database_path,
+        )
+
+    assert result["file_count"] == 1
+
+    assert result["sources"] == [
+        "external/notes.txt"
+    ]
+
+    documents = get_all_documents(
+        database_path
+    )
+
+    assert (
+        documents[0]["source"]
+        == "external/notes.txt"
+    )
+
+
+def test_selected_source_uses_external_docx_source_name(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "lecture.docx"
+
+    document = Document()
+    document.add_paragraph(
+        "DOCX external source test."
+    )
+    document.save(file_path)
+
+    database_path = tmp_path / "test.db"
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.2, 0.4],
+        ],
+    ):
+        result = ingest_selected_source(
+            source_path=file_path,
+            database_path=database_path,
+        )
+
+    assert result["sources"] == [
+        "external/lecture.docx"
+    ]
+
+    documents = get_all_documents(
+        database_path
+    )
+
+    assert (
+        documents[0]["source"]
+        == "external/lecture.docx"
+    )
+
+
+def test_selected_source_uses_external_pdf_source_name(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "lecture.pdf"
+
+    file_path.write_bytes(
+        b"placeholder-pdf"
+    )
+
+    database_path = tmp_path / "test.db"
+
+    with (
+        patch(
+            "src.ingestion.read_document_file",
+            return_value=(
+                "PDF external source test."
+            ),
+        ),
+        patch(
+            "src.ingestion.generate_embeddings",
+            return_value=[
+                [0.3, 0.5],
+            ],
+        ),
+    ):
+        result = ingest_selected_source(
+            source_path=file_path,
+            database_path=database_path,
+        )
+
+    assert result["sources"] == [
+        "external/lecture.pdf"
+    ]
+
+    documents = get_all_documents(
+        database_path
+    )
+
+    assert (
+        documents[0]["source"]
+        == "external/lecture.pdf"
+    )
+
+
+def test_selected_source_accepts_custom_docx_name(
+    tmp_path: Path,
+) -> None:
+    temporary_file = tmp_path / "temporary.docx"
+
+    document = Document()
+    document.add_paragraph(
+        "Original DOCX upload test."
+    )
+    document.save(temporary_file)
+
+    database_path = tmp_path / "test.db"
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.4, 0.6],
+        ],
+    ):
+        result = ingest_selected_source(
+            source_path=temporary_file,
+            database_path=database_path,
+            external_source_name=(
+                "project_report.docx"
+            ),
+        )
+
+    assert result["sources"] == [
+        "external/project_report.docx"
+    ]
+
+
+def test_selected_source_accepts_custom_pdf_name(
+    tmp_path: Path,
+) -> None:
+    temporary_file = tmp_path / "temporary.pdf"
+
+    temporary_file.write_bytes(
+        b"placeholder-pdf"
+    )
+
+    database_path = tmp_path / "test.db"
+
+    with (
+        patch(
+            "src.ingestion.read_document_file",
+            return_value=(
+                "Uploaded PDF document."
+            ),
+        ),
+        patch(
+            "src.ingestion.generate_embeddings",
+            return_value=[
+                [0.5, 0.7],
+            ],
+        ),
+    ):
+        result = ingest_selected_source(
+            source_path=temporary_file,
+            database_path=database_path,
+            external_source_name=(
+                "project_report.pdf"
+            ),
+        )
+
+    assert result["sources"] == [
+        "external/project_report.pdf"
+    ]
+
+
+def test_selected_source_rejects_unsupported_custom_name(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "temporary.txt"
+
+    file_path.write_text(
+        "Temporary upload",
+        encoding="utf-8",
+    )
+
+    database_path = tmp_path / "test.db"
+
+    with pytest.raises(ValueError):
+        ingest_selected_source(
+            source_path=file_path,
+            database_path=database_path,
+            external_source_name=(
+                "malicious.exe"
+            ),
+        )
+
+
+def test_selected_source_replaces_existing_source(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "replace.txt"
+
+    database_path = tmp_path / "test.db"
+
+    file_path.write_text(
+        "Version one",
+        encoding="utf-8",
+    )
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.1, 0.2],
+        ],
+    ):
+        first_result = ingest_selected_source(
+            source_path=file_path,
+            database_path=database_path,
+        )
+
+    assert (
+        first_result["inserted_chunks"]
+        == 1
+    )
+
+    file_path.write_text(
+        "Version two",
+        encoding="utf-8",
+    )
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[
+            [0.3, 0.4],
+        ],
+    ):
+        second_result = ingest_selected_source(
+            source_path=file_path,
+            database_path=database_path,
+        )
+
+    documents = get_all_documents(
+        database_path
+    )
+
+    assert (
+        second_result["inserted_chunks"]
+        == 1
+    )
+
+    assert len(documents) == 1
+
+    assert (
+        documents[0]["content"]
+        == "Version two"
+    )
+
+    assert (
+        documents[0]["source"]
+        == "external/replace.txt"
+    )
+
+
+def test_ingest_document_file_rejects_embedding_count_mismatch(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "document.txt"
+
+    file_path.write_text(
+        "Embedding count validation.",
+        encoding="utf-8",
+    )
+
+    database_path = tmp_path / "test.db"
+
+    with patch(
+        "src.ingestion.generate_embeddings",
+        return_value=[],
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match=(
+                "Chunk and embedding counts "
+                "do not match"
+            ),
+        ):
+            ingest_document_file(
+                file_path=file_path,
+                database_path=database_path,
+            )
